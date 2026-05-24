@@ -1,65 +1,94 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex flex-col md:flex-row min-h-[calc(100vh-4rem)] pb-24 md:pb-0">
+      {/* Hero Section with Motivational Illustration */}
+      <div className="relative w-full md:w-1/2 aspect-square md:aspect-auto md:min-h-full overflow-hidden flex flex-col items-center justify-center p-8 bg-orange-50 dark:bg-neutral-900/30">
+        <div className="hidden md:block text-center mb-12">
+          <h2 className="text-4xl lg:text-5xl font-headline font-black text-neutral-900 dark:text-white mb-4">
+            Learn. Lead. <span className="text-orange-500">Grow.</span>
+          </h2>
+          <p className="text-lg text-neutral-500 dark:text-neutral-400 max-w-md mx-auto">
+            Join the movement of young innovators and empower your future today.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <img
+          alt="ThalirVerse Educational Illustration"
+          className="w-full max-w-md h-auto object-contain md:animate-[float_6s_ease-in-out_infinite]"
+          src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJ9Ew6FJ1h88hvpP4SFDJ-qjXVg68_xE3u0FE_IXLAclxxz6eQxjyYhBR8wOfcf-RgAIf4bMYa9srKSAuupReOYdEGeJBKIVcwnHUw6bEkkUnPPb3yIXoQRWHEotLv8kywgDpdi_wTng2PTnT0VWZO3s4Qhkaojnjjer4POIW792XGfO8AzP6mfL-HRpMmYUQVlhmiGtGdjADrm9xjKCpawJuP7rVG6Ew0ePJhumM1VKTGq7x9JEKiBNAZIgAyRNZ-V1zgo9Q-U7A"
+        />
+      </div>
+
+      {/* Auth Card Area */}
+      <div className="w-full md:w-1/2 flex flex-col justify-center p-6 md:p-12 lg:p-16 bg-white dark:bg-neutral-950 -mt-8 md:mt-0 relative z-10 rounded-t-3xl md:rounded-none shadow-[0_-10px_40px_rgba(0,0,0,0.05)] md:shadow-none min-h-[60vh]">
+        <div className="w-full max-w-md mx-auto py-8">
+          
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-headline font-bold text-neutral-900 dark:text-white">Welcome back</h1>
+            <p className="text-neutral-500 dark:text-neutral-400 mt-2">Log in to continue your learning journey.</p>
+          </div>
+
+          <form className="space-y-5">
+            <div className="flex flex-col">
+              <label htmlFor="username" className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">
+                Username or Email
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="student@school.edu"
+                className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white"
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <label htmlFor="password" className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="remember"
+                  name="remember"
+                  type="checkbox"
+                  className="h-4 w-4 text-orange-500 border-neutral-300 rounded focus:ring-orange-500"
+                />
+                <label htmlFor="remember" className="ml-2 block text-sm text-neutral-600 dark:text-neutral-400">
+                  Remember me
+                </label>
+              </div>
+              <a href="#" className="text-sm font-semibold text-orange-600 hover:text-orange-500 dark:text-orange-400">
+                Forgot password?
+              </a>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-headline font-bold py-3 px-4 rounded-xl shadow-[0_8px_15px_-3px_rgba(255,153,51,0.3)] hover:shadow-[0_12px_20px_-3px_rgba(255,153,51,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all"
+            >
+              Log in
+            </button>
+          </form>
+
+          <div className="mt-8 text-center">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Don't have an account?{" "}
+              <a href="/register" className="font-semibold text-orange-600 hover:text-orange-500 dark:text-orange-400">
+                Register here
+              </a>
+            </p>
+          </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
