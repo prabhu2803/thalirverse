@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Disable dark mode by changing the dark variant selector to an unused class */
+@variant dark (.dark-only-override-never-used &);
+
 @theme {
   --color-orange-50: #fff7ed;
   --color-orange-100: #ffedd5;
@@ -23,12 +26,7 @@
   --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* System-wide light/dark mode override to enforce clean white background as requested */
 
 body {
   background: var(--background);

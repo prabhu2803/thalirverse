@@ -33,7 +33,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-neutral-50 font-body text-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
+      <body className="min-h-full flex flex-col bg-white font-body text-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
         {children}
       </body>
     </html>

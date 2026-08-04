@@ -1,149 +1,359 @@
 'use client';
 
-import { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { dataService } from '@/lib/supabaseClient';
 
-export default function CourseView({ params }: { params: { id: string } }) {
+const SIDEBAR_ICONS = [
+  { icon: 'grid_view',      href: '/dashboard' },
+  { icon: 'school',         href: '/dashboard' },
+  { icon: 'quiz',           href: '#quiz' },
+  { icon: 'library_books',  href: '#' },
+  { icon: 'help',           href: '#' },
+];
+
+const TABS = ['Overview', 'Notes', 'Discussions', 'Reviews'];
+
+export default function CourseView({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(params);
+  const router = useRouter();
+
+  const [student,        setStudent]      = useState<any>(null);
+  const [course,         setCourse]       = useState<any>(null);
+  const [activeLesson,   setActiveLesson] = useState<any>(null);
+  const [progress,       setProgress]     = useState<any[]>([]);
+  const [loading,        setLoading]      = useState(true);
+  const [watchProgress,  setWatchPct]     = useState(0);
+  const [isCompleted,    setIsCompleted]  = useState(false);
+  const [activeTab,      setActiveTab]    = useState('Overview');
+
+  const isCompletedRef  = useRef(false);
+  const playerRef       = useRef<any>(null);
+  const intervalRef     = useRef<any>(null);
+
+  const getYouTubeId = (url: string) => {
+    const m = url?.match(/(?:youtu\.be\/|v=|embed\/)([^#&?]{11})/);
+    return m?.[1] ?? null;
+  };
+
   useEffect(() => {
-    // Micro-interaction for the "Continue" FAB could be handled by Framer Motion, 
-    // but for now we'll stick to simple Tailwind classes and standard React.
-  }, []);
+    (async () => {
+      try {
+        const s = await dataService.getActiveStudent();
+        setStudent(s);
+        const c = await dataService.getModule(id);
+        setCourse(c);
+        if (c?.lessons?.length) setActiveLesson(c.lessons[0]);
+        if (s) setProgress(await dataService.getProgress(s.id));
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    })();
+  }, [id]);
+
+  useEffect(() => {
+    if (!activeLesson || typeof window === 'undefined') return;
+    const videoId = getYouTubeId(activeLesson.content_url ?? '');
+    if (!videoId) return;
+    const existing = progress.find(p => p.lesson_id === activeLesson.id);
+    const done = existing?.status === 'COMPLETED';
+    isCompletedRef.current = done;
+    setIsCompleted(done);
+    setWatchPct(0);
+
+    let script = document.getElementById('yt-api') as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id  = 'yt-api';
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(script);
+    }
+
+    const init = () => {
+      playerRef.current?.destroy?.();
+      playerRef.current = new (window as any).YT.Player('yt-frame', {
+        videoId, height: '100%', width: '100%',
+        playerVars: { playsinline: 1, modestbranding: 1, rel: 0 },
+        events: {
+          onStateChange: (e: any) => {
+            if (e.data === 1) startTracking(); else stopTracking();
+          },
+        },
+      });
+    };
+
+    (window as any).YT?.Player ? init() : ((window as any).onYouTubeIframeAPIReady = init);
+    return () => { stopTracking(); playerRef.current?.destroy?.(); };
+  }, [activeLesson, progress]);
+
+  const startTracking = () => {
+    stopTracking();
+    intervalRef.current = setInterval(() => {
+      const p = playerRef.current;
+      if (!p?.getDuration) return;
+      const pct = Math.round((p.getCurrentTime() / p.getDuration()) * 100);
+      setWatchPct(pct);
+      if (pct >= 90 && !isCompletedRef.current) {
+        isCompletedRef.current = true;
+        markComplete();
+      }
+    }, 1000);
+  };
+
+  const stopTracking = () => { clearInterval(intervalRef.current); intervalRef.current = null; };
+
+  const markComplete = async () => {
+    setIsCompleted(true);
+    stopTracking();
+    if (student && course && activeLesson) {
+      await dataService.updateLessonProgress(student.id, course.id, activeLesson.id, 'COMPLETED', 100);
+      setProgress(await dataService.getProgress(student.id));
+    }
+  };
+
+  if (loading || !course) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-white">
+        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
+          <span className="animate-spin text-4xl">⏳</span>
+          <span>Loading Curriculum...</span>
+        </div>
+      </div>
+    );
+  }
+
+  const completedIds    = new Set(progress.filter(p => p.status === 'COMPLETED').map(p => p.lesson_id));
+  const doneLessons     = course.lessons?.filter((l: any) => completedIds.has(l.id)).length ?? 0;
+  const totalLessons    = course.lessons?.length ?? 0;
+  const coursePercent   = totalLessons > 0 ? Math.round((doneLessons / totalLessons) * 100) : 0;
+  const quizUnlocked    = !totalLessons || doneLessons === totalLessons;
 
   return (
-    <div className="bg-neutral-50 dark:bg-neutral-950 font-body text-neutral-900 dark:text-neutral-100 min-h-screen">
-      {/* TopAppBar */}
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-4 h-16 bg-white dark:bg-neutral-900 border-b border-neutral-100 dark:border-neutral-800 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="active:scale-95 transition-transform p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full flex items-center justify-center">
-            <span className="material-symbols-outlined text-orange-500">arrow_back</span>
+    <div className="flex min-h-screen bg-white font-body text-neutral-900">
+
+      {/* ── Narrow icon sidebar ─────────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col items-center w-20 bg-white border-r border-neutral-100 py-6 gap-6 fixed left-0 top-0 h-full z-40">
+        <Link href="/" className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center mb-2">
+          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>school</span>
+        </Link>
+        {SIDEBAR_ICONS.map(({ icon, href }) => (
+          <Link key={icon} href={href}
+            className="p-3 rounded-xl flex items-center justify-center text-neutral-500 hover:bg-orange-50 hover:text-orange-500 transition-all active:scale-95">
+            <span className="material-symbols-outlined">{icon}</span>
           </Link>
-          <h1 className="font-display text-lg font-black text-orange-500">ThalirVerse</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="active:scale-95 transition-transform p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full">
-            <span className="material-symbols-outlined text-neutral-500">more_vert</span>
-          </button>
-        </div>
-      </header>
+        ))}
+      </aside>
 
-      <main className="pt-20 pb-24 px-4 max-w-4xl mx-auto">
-        {/* Header Section */}
-        <section className="mb-8">
-          <div className="flex flex-col gap-2">
-            <h2 className="font-headline text-2xl font-bold">Entrepreneurship 101</h2>
-            <p className="text-neutral-500 text-sm md:text-base leading-relaxed">Learn to turn your ideas into a real business.</p>
-            
-            {/* Progress bar container */}
-            <div className="mt-4 bg-neutral-200 dark:bg-neutral-800 rounded-full h-3 overflow-hidden border border-neutral-300 dark:border-neutral-700">
-              <div className="bg-orange-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: '45%' }}></div>
-            </div>
-            <div className="flex justify-between items-center mt-1">
-              <span className="font-label text-xs font-bold text-orange-500">45% Completed</span>
-              <span className="font-label text-xs font-medium text-neutral-500">Lesson 2 of 4</span>
-            </div>
+      {/* ── Main area ───────────────────────────────────────────── */}
+      <div className="flex-1 lg:ml-20 flex flex-col min-h-screen">
+
+        {/* Top navbar */}
+        <header className="sticky top-0 z-30 bg-white border-b border-neutral-100 h-14 flex items-center justify-between px-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-headline font-black text-orange-500 hidden sm:block">ThalirVerse</span>
+            {/* Breadcrumb */}
+            <nav className="hidden md:flex items-center gap-1.5 text-xs font-label">
+              <Link href="/dashboard" className="text-neutral-400 hover:text-orange-500 transition-colors">My Courses</Link>
+              <span className="material-symbols-outlined text-neutral-300 text-sm">chevron_right</span>
+              <span className="text-neutral-400">{course.category || 'Course'}</span>
+              <span className="material-symbols-outlined text-neutral-300 text-sm">chevron_right</span>
+              <span className="text-orange-500 font-bold">{course.title}</span>
+            </nav>
           </div>
-        </section>
-
-        {/* Video Player Module */}
-        <section className="mb-8 overflow-hidden rounded-xl bg-black aspect-video relative group shadow-xl">
-          <img 
-            className="w-full h-full object-cover opacity-80" 
-            alt="Startup Office" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCu__bbOoTpkGs4WNSurK7Z3XKsV1THhuLFDkT8HYK9AZoG7zm3rTaHMj-MWPqCYReEx0hJStfD8d1OoqBCzSAfUmsw8tx3cjBg4A5oNR8fqCIzWzmEDsO6OsvcPqrEN2x3OC7fvc61k_8-0Yo-vleLGLqkflkdX5NnJVmn9qz6_d3pB18xLHp_E-b8W-IMRvVEj4Jv0Pmu9wuLCv98DSW5ajPpV6fsD1DKXusCBp2yRplp_dh9GvnNn-J9aSPnwal0Li0tOGYdDtc"
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <button className="w-20 h-20 bg-orange-500/90 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all duration-300 group-hover:bg-orange-500">
-              <span className="material-symbols-outlined text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+          <div className="flex items-center gap-2">
+            <div className="relative hidden md:block">
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">search</span>
+              <input placeholder="Search lessons..." className="pl-8 pr-4 py-1.5 bg-neutral-50 border border-neutral-200 rounded-full text-xs focus:outline-none focus:border-orange-400 w-44 transition-all" />
+            </div>
+            <button className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:bg-neutral-100 transition-colors">
+              <span className="material-symbols-outlined text-lg">notifications</span>
             </button>
-          </div>
-          
-          {/* Video Controls Placeholder */}
-          <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-black/80 to-transparent flex items-center px-4 justify-between text-white/90">
-            <div className="flex items-center gap-4">
-              <span className="material-symbols-outlined text-sm">play_circle</span>
-              <div className="w-32 h-1 bg-white/30 rounded-full">
-                <div className="bg-orange-500 h-full w-1/3 rounded-full"></div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="material-symbols-outlined text-sm">settings</span>
-              <span className="material-symbols-outlined text-sm">fullscreen</span>
+            <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-black">
+              {student?.fullName?.[0] ?? '?'}
             </div>
           </div>
-        </section>
+        </header>
 
-        {/* Activity Checklist */}
-        <section className="space-y-3">
-          <h3 className="font-headline text-lg font-bold px-1">Curriculum</h3>
-          
-          {/* Item 1: Completed */}
-          <div className="flex items-center gap-4 p-4 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
-            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-green-500/10 text-green-500 rounded-full">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 0, 'wght' 600" }}>check_circle</span>
-            </div>
-            <div className="flex-grow">
-              <h4 className="font-headline text-sm font-bold">Introduction to Startups</h4>
-              <div className="flex items-center gap-2 mt-0.5 text-neutral-500">
-                <span className="material-symbols-outlined text-xs">video_library</span>
-                <span className="font-label text-xs">5:20 min</span>
+        {/* Content + right panel */}
+        <div className="flex flex-1 min-h-0">
+
+          {/* Main content */}
+          <div className="flex-1 overflow-y-auto p-5 min-w-0">
+
+            {/* Video Player */}
+            {totalLessons > 0 ? (
+              <div className="rounded-3xl overflow-hidden bg-black aspect-video mb-5 relative shadow-2xl ring-1 ring-black/5 group">
+                <div id="yt-frame" className="w-full h-full" />
+                {isCompleted && (
+                  <div className="absolute top-3 left-3 bg-green-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">check_circle</span>COMPLETED
+                  </div>
+                )}
+                {watchProgress > 0 && !isCompleted && (
+                  <div className="absolute top-3 left-3 bg-orange-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>WATCHING ({watchProgress}%)
+                  </div>
+                )}
               </div>
+            ) : (
+              <div className="rounded-2xl bg-orange-50 border border-orange-100 p-10 flex flex-col items-center text-center gap-3 mb-5">
+                <span className="material-symbols-outlined text-4xl text-orange-500">quiz</span>
+                <h3 className="font-headline font-black text-lg">Quiz-Only Module</h3>
+                <p className="text-sm text-neutral-500">Take the quiz below to earn your badge for this module.</p>
+              </div>
+            )}
+
+            {/* Lesson title + actions */}
+            {activeLesson && (
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-xl font-headline font-black text-neutral-900">{activeLesson.title}</h2>
+                  <p className="text-sm text-neutral-500 mt-1">{course.title}</p>
+                </div>
+                <div className="flex gap-3 shrink-0">
+                  <button className="flex items-center gap-1.5 px-4 py-2 border border-neutral-200 hover:border-orange-400 text-neutral-600 hover:text-orange-500 text-sm font-bold rounded-xl transition-all">
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    Resources
+                  </button>
+                  <button
+                    onClick={markComplete}
+                    disabled={isCompleted}
+                    className={`flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-xl transition-all ${
+                      isCompleted
+                        ? 'bg-green-100 text-green-600 border border-green-200 cursor-default'
+                        : 'bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/20 hover:-translate-y-0.5'
+                    }`}>
+                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      {isCompleted ? 'check_circle' : 'task_alt'}
+                    </span>
+                    {isCompleted ? 'Completed' : 'Complete Lesson'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="border-b border-neutral-100 flex gap-6 mb-5">
+              {TABS.map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`pb-3 text-sm font-label font-semibold transition-all border-b-2 -mb-px ${
+                    activeTab === tab
+                      ? 'text-orange-500 border-orange-500'
+                      : 'text-neutral-400 border-transparent hover:text-neutral-600'
+                  }`}>
+                  {tab}
+                </button>
+              ))}
             </div>
-            <span className="font-label text-xs font-bold text-green-500">COMPLETED</span>
+
+            {/* Tab content */}
+            {activeTab === 'Overview' && (
+              <div className="space-y-4">
+                <p className="text-sm text-neutral-600 leading-relaxed">
+                  {course.description || 'No description available for this module.'}
+                </p>
+                {course.category && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <span className="text-[10px] font-label font-black px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full uppercase tracking-wider">
+                      {course.category}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {activeTab !== 'Overview' && (
+              <div className="py-8 text-center text-neutral-400">
+                <span className="material-symbols-outlined text-4xl mb-2 block">construction</span>
+                <p className="text-sm font-medium">{activeTab} coming soon.</p>
+              </div>
+            )}
           </div>
 
-          {/* Item 2: Current/Unlocked */}
-          <div className="flex items-center gap-4 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-500/30 ring-2 ring-orange-500/10">
-            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-orange-500 text-white rounded-full">
-              <span className="material-symbols-outlined">description</span>
-            </div>
-            <div className="flex-grow">
-              <h4 className="font-headline text-sm font-bold text-orange-900 dark:text-orange-100">Market Research Basics</h4>
-              <div className="flex items-center gap-2 mt-0.5 text-orange-700 dark:text-orange-300">
-                <span className="material-symbols-outlined text-xs">article</span>
-                <span className="font-label text-xs">12 Page PDF</span>
+          {/* ── Right "Course Content" panel ───────────────────── */}
+          <div className="hidden lg:flex flex-col w-72 xl:w-80 border-l border-neutral-100 bg-white shrink-0 overflow-y-auto">
+            <div className="px-5 py-4 border-b border-neutral-100 shrink-0">
+              <h3 className="font-headline font-bold text-base text-neutral-900">Course Content</h3>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 bg-neutral-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-orange-500 h-full rounded-full transition-all duration-700"
+                    style={{ width: `${coursePercent}%` }} />
+                </div>
+                <span className="text-xs font-label font-bold text-orange-500 shrink-0">{coursePercent}% Complete</span>
               </div>
             </div>
-            <div className="flex items-center gap-1 bg-orange-500 px-3 py-1 rounded-full text-white">
-              <span className="font-label text-xs font-bold uppercase tracking-wider">Learning</span>
+
+            <div className="flex-1 py-3 px-3 space-y-1">
+              {course.lessons?.map((lesson: any, i: number) => {
+                const done    = completedIds.has(lesson.id);
+                const active  = activeLesson?.id === lesson.id;
+                return (
+                  <button key={lesson.id} onClick={() => { setActiveLesson(lesson); isCompletedRef.current = done; setIsCompleted(done); }}
+                    className={`w-full text-left flex items-start gap-3 p-4 rounded-2xl transition-all group ${
+                      active   ? 'bg-white border-2 border-orange-500 shadow-lg shadow-orange-500/10' :
+                      done     ? 'bg-orange-50/50 border border-orange-100 hover:shadow-md'           :
+                                 'bg-neutral-50 border border-neutral-100 opacity-60 cursor-not-allowed'
+                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      done   ? 'bg-orange-100 text-orange-600' :
+                      active ? 'bg-orange-500 text-white'      :
+                               'bg-neutral-200 text-neutral-400'
+                    }`}>
+                      {done
+                        ? <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                        : active
+                          ? <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+                          : <span className="text-[10px] font-black">{(i + 1).toString().padStart(2, '0')}</span>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold leading-snug truncate ${active ? 'text-orange-600' : 'text-neutral-700'}`}>
+                        {String(i + 1).padStart(2, '0')}. {lesson.title}
+                      </p>
+                      <p className={`text-[10px] mt-0.5 font-label ${
+                        active ? 'text-orange-400' : done ? 'text-green-500' : 'text-neutral-400'
+                      }`}>
+                        {active ? 'Currently Playing' : done ? 'Completed' : 'Locked'}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Quiz row */}
+              {course.quiz && (
+                <div className={`flex items-start gap-3 px-3 py-3 rounded-xl mt-1 ${
+                  quizUnlocked ? 'bg-orange-50 border border-orange-200' : 'opacity-50'
+                }`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                    quizUnlocked ? 'bg-orange-500 text-white' : 'bg-neutral-100 text-neutral-400'
+                  }`}>
+                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>quiz</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-neutral-700 truncate">Module Quiz</p>
+                    <p className="text-[10px] text-neutral-400 font-label">
+                      {quizUnlocked ? 'Ready to take' : `Unlock after Lesson ${totalLessons}`}
+                    </p>
+                  </div>
+                  {quizUnlocked && (
+                    <Link href={`/quiz/${course.id}`}
+                      className="shrink-0 text-orange-500 hover:text-orange-600">
+                      <span className="material-symbols-outlined text-lg">chevron_right</span>
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Ask a question */}
+            <div className="px-4 py-4 border-t border-neutral-100 shrink-0">
+              <button className="w-full flex items-center justify-center gap-2 py-2.5 border border-neutral-200 hover:border-orange-400 hover:text-orange-500 text-sm font-bold text-neutral-500 rounded-xl transition-all">
+                <span className="material-symbols-outlined text-sm">chat_bubble</span>
+                Ask a Question
+              </button>
             </div>
           </div>
-
-          {/* Item 3: Locked */}
-          <div className="flex items-center gap-4 p-4 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 opacity-60 cursor-not-allowed">
-            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 text-neutral-500 rounded-full">
-              <span className="material-symbols-outlined">lock</span>
-            </div>
-            <div className="flex-grow">
-              <h4 className="font-headline text-sm font-bold">Customer Discovery</h4>
-              <div className="flex items-center gap-2 mt-0.5 text-neutral-500">
-                <span className="material-symbols-outlined text-xs">video_library</span>
-                <span className="font-label text-xs">8:45 min</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Item 4: Locked Quiz */}
-          <Link href={`/quiz/${params.id}`} className="flex items-center gap-4 p-4 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-orange-500/50 transition-colors group">
-            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 text-neutral-500 group-hover:text-orange-500 rounded-full transition-colors">
-              <span className="material-symbols-outlined">quiz</span>
-            </div>
-            <div className="flex-grow">
-              <h4 className="font-headline text-sm font-bold group-hover:text-orange-500 transition-colors">Final Module Quiz</h4>
-              <div className="flex items-center gap-2 mt-0.5 text-neutral-500">
-                <span className="material-symbols-outlined text-xs">quiz</span>
-                <span className="font-label text-xs">15 Questions</span>
-              </div>
-            </div>
-          </Link>
-        </section>
-      </main>
-
-      {/* FAB: Continue */}
-      <div className="fixed bottom-8 right-6 z-40">
-        <button className="bg-orange-500 text-white shadow-[0_10px_25px_-5px_rgba(249,115,22,0.5)] rounded-full px-6 py-4 flex items-center gap-3 active:scale-95 transition-all hover:bg-orange-600">
-          <span className="font-label font-bold text-sm uppercase tracking-widest">Continue</span>
-          <span className="material-symbols-outlined">arrow_forward</span>
-        </button>
+        </div>
       </div>
     </div>
   );

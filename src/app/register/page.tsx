@@ -1,84 +1,346 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { dataService } from '@/lib/supabaseClient';
+
 export default function Register() {
+  const router = useRouter();
+  
+  // Multi-step form step tracking (1: Student Info, 2: School Details)
+  const [step, setStep] = useState(1);
+  
+  // Fields state
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [dob, setDob] = useState('');
+  const [gender, setGender] = useState('male');
+  const [school, setSchool] = useState('');
+  const [standard, setStandard] = useState('');
+  const [section, setSection] = useState('A');
+  const [district, setDistrict] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [emailSent, setEmailSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const handleNext = (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    if (!firstName || !lastName || !email) {
+      setError('Please fill out all required fields (First Name, Last Name, Email).');
+      return;
+    }
+    if (!password) {
+      setError('Please create a password.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    setError('');
+    setStep(2);
+  };
+
+  const handleSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    if (!school || !standard) {
+      setError('Please provide your School Name and Standard/Class.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    const fullName = `${firstName} ${lastName}`;
+    const userEmail = email;
+    try {
+      const result: any = await dataService.signUp(userEmail, fullName, school, standard, section, district, password);
+
+      if (result?.session) {
+        router.push('/dashboard');
+      } else {
+        // No session means email confirmation is required
+        setEmailSent(true);
+      }
+    } catch (err: any) {
+      if (err?.code === 'email_not_confirmed' || err?.message?.includes('confirmation link')) {
+        setEmailSent(true);
+      } else if (err?.message?.includes('already registered') || err?.message?.includes('already exists')) {
+        setError('This email is already registered. Try logging in instead.');
+      } else if (err?.code === 'email_address_invalid' || err?.message?.includes('is invalid')) {
+        setError('Please use a valid email address to receive your confirmation link.');
+      } else if (err?.message?.includes('duplicate key') || err?.message?.includes('unique constraint')) {
+        setError('This email is already registered. Try logging in instead.');
+      } else if (err?.message?.includes('rate limit') || err?.message?.includes('email rate limit') || err?.status === 429) {
+        setError('Too many sign-up attempts. Please wait a few minutes and try again.');
+      } else if (err?.message?.includes('Unable to validate email address')) {
+        setError('This email address could not be validated. Please use a real, working email address.');
+      } else {
+        setError(err?.message || 'Registration failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (emailSent) {
+    return (
+      <main className="relative min-h-screen bg-white dark:bg-neutral-950 flex justify-center items-center px-4">
+        <div className="max-w-md w-full text-center space-y-6 bg-white dark:bg-neutral-900 rounded-3xl shadow-xl border border-slate-100 dark:border-neutral-800 p-10">
+          <div className="w-20 h-20 rounded-full bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mx-auto">
+            <span className="material-symbols-outlined text-5xl text-orange-500">mark_email_unread</span>
+          </div>
+          <div>
+            <h2 className="text-2xl font-headline font-black text-neutral-900 dark:text-white">Check your email</h2>
+            <p className="text-neutral-500 dark:text-neutral-400 mt-2 text-sm">
+              We sent a confirmation link to <span className="font-bold text-neutral-700 dark:text-neutral-300">{email}</span>. Click it to activate your account, then log in.
+            </p>
+          </div>
+          <Link href="/login" className="inline-block w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition-all">
+            Go to Login
+          </Link>
+          <p className="text-xs text-neutral-400">
+            Didn&apos;t get it? Check your spam folder or ask your Yi coordinator to disable email confirmation for testing.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-neutral-50 dark:bg-neutral-950 py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
-      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
+    <main className="relative min-h-screen bg-white dark:bg-neutral-950 py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
+      {/* Floating Back Button */}
+      <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 text-slate-500 hover:text-orange-500 transition-colors font-bold text-sm z-50">
+        <span className="material-symbols-outlined">arrow_back</span>
+        Back to Home
+      </Link>
+      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl overflow-hidden border border-slate-100 dark:border-neutral-800">
         <div className="p-8 sm:p-12">
+          
+          {/* Header */}
           <div className="text-center mb-10">
             <h1 className="text-3xl font-headline font-black text-neutral-900 dark:text-white">Join ThalirVerse</h1>
             <p className="text-neutral-500 dark:text-neutral-400 mt-2">Create your account to start learning and leading.</p>
+            
+            {/* Step Indicators */}
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <span className={`h-2.5 w-12 rounded-full transition-all duration-300 ${step === 1 ? 'bg-orange-500' : 'bg-orange-200'}`}></span>
+              <span className={`h-2.5 w-12 rounded-full transition-all duration-300 ${step === 2 ? 'bg-orange-500' : 'bg-orange-200'}`}></span>
+            </div>
           </div>
 
-          <form className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">First Name</label>
-                <input type="text" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
-              </div>
-              <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Last Name</label>
-                <input type="text" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
-              </div>
+          {error && (
+            <div className="p-4 mb-6 text-sm text-red-600 bg-red-50 rounded-xl border border-red-100">
+              {error}
             </div>
+          )}
 
-            <div className="flex flex-col">
-              <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Email Address</label>
-              <input type="email" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Date of Birth</label>
-                <input type="date" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
+          {step === 1 ? (
+            /* STEP 1: Student Information */
+            <form onSubmit={handleNext} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">First Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Arjun"
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Last Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="M"
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  />
+                </div>
               </div>
-              <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Phone Number</label>
-                <input type="tel" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
-              </div>
-            </div>
 
-            <div className="border-t border-neutral-100 dark:border-neutral-800 my-8 pt-8">
-              <h3 className="text-lg font-headline font-bold text-neutral-900 dark:text-white mb-6">School Details</h3>
-              
-              <div className="flex flex-col mb-6">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">School Name</label>
-                <input type="text" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Email Address *</label>
+                <input 
+                  type="email" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="arjun@school.edu"
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Yi Chapter</label>
-                  <select className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none">
-                    <option value="madurai">Madurai</option>
-                  </select>
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Password *</label>
+                  <div className="relative">
+                    <input 
+                      type={showPassword ? 'text' : 'password'} 
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full pl-4 pr-12 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors focus:outline-none"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <span className="material-symbols-outlined text-[22px]">
+                        {showPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Standard / Class</label>
-                  <select className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none">
-                    <option value="">Select your class</option>
-                    <option value="6">6th Standard</option>
-                    <option value="7">7th Standard</option>
-                    <option value="8">8th Standard</option>
-                    <option value="9">9th Standard</option>
-                    <option value="10">10th Standard</option>
-                    <option value="11">11th Standard</option>
-                    <option value="12">12th Standard</option>
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Confirm Password *</label>
+                  <div className="relative">
+                    <input 
+                      type={showConfirmPassword ? 'text' : 'password'} 
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      className="w-full pl-4 pr-12 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors focus:outline-none"
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <span className="material-symbols-outlined text-[22px]">
+                        {showConfirmPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Date of Birth</label>
+                  <input 
+                    type="date" 
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Gender</label>
+                  <select 
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-col">
-              <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Password</label>
-              <input type="password" placeholder="Create a strong password" className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" />
-            </div>
+              <button
+                type="submit"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-headline font-bold py-4 px-4 rounded-xl shadow-[0_8px_15px_-3px_rgba(255,153,51,0.3)] hover:shadow-[0_12px_20px_-3px_rgba(255,153,51,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all mt-8"
+              >
+                Continue to School Details
+              </button>
+            </form>
+          ) : (
+            /* STEP 2: School & Yi Details */
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">School Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  placeholder="Greenwood High School"
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-headline font-bold py-4 px-4 rounded-xl shadow-[0_8px_15px_-3px_rgba(255,153,51,0.3)] hover:shadow-[0_12px_20px_-3px_rgba(255,153,51,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all mt-8"
-            >
-              Create Account
-            </button>
-          </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Standard / Class *</label>
+                  <select 
+                    required
+                    value={standard}
+                    onChange={(e) => setStandard(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
+                  >
+                    <option value="">Select your class</option>
+                    <option value="6th Standard">6th Standard</option>
+                    <option value="7th Standard">7th Standard</option>
+                    <option value="8th Standard">8th Standard</option>
+                    <option value="9th Standard">9th Standard</option>
+                    <option value="10th Standard">10th Standard</option>
+                    <option value="11th Standard">11th Standard</option>
+                    <option value="12th Standard">12th Standard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Section</label>
+                  <input 
+                    type="text" 
+                    value={section}
+                    onChange={(e) => setSection(e.target.value)}
+                    placeholder="A"
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">District/City</label>
+                  <input 
+                    type="text" 
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                    placeholder="Madurai"
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center gap-4 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="w-1/3 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-headline font-bold py-4 px-4 rounded-xl transition-all hover:bg-neutral-200"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-2/3 bg-orange-500 hover:bg-orange-600 text-white font-headline font-bold py-4 px-4 rounded-xl shadow-[0_8px_15px_-3px_rgba(255,153,51,0.3)] hover:shadow-[0_12px_20px_-3px_rgba(255,153,51,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {loading ? 'Creating Account...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="mt-8 text-center">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
