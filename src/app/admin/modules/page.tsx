@@ -45,6 +45,8 @@ export default function AdminModules() {
   const [includeQuiz, setIncludeQuiz] = useState(false);
   const [quizTitle, setQuizTitle] = useState('');
   const [passPercent, setPassPercent] = useState(80);
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(300);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([makeQuestion('init', 0)]);
 
   const [creating, setCreating] = useState(false);
@@ -102,6 +104,7 @@ export default function AdminModules() {
     setNewTitle(''); setNewCategory(''); setNewDescription('');
     setSkipLessons(false); setNewLessons([]); setLessonTitle(''); setLessonUrl('');
     setIncludeQuiz(false); setQuizTitle(''); setPassPercent(80);
+    setTimeLimitSeconds(300); setShuffleQuestions(false);
     setQuestions([makeQuestion(String(Date.now()), 0)]);
     setCreateError('');
   }
@@ -141,7 +144,9 @@ export default function AdminModules() {
       }
 
       if (includeQuiz && questions.some(q => q.question_text.trim())) {
-        await dataService.saveQuiz(created.id, quizTitle || `${newTitle} Quiz`, passPercent, questions);
+        await dataService.saveQuiz(created.id, quizTitle || `${newTitle} Quiz`, passPercent, questions, {
+          timeLimitSeconds, shuffleQuestions,
+        });
       }
 
       window.location.href = '/admin/modules';
@@ -465,6 +470,23 @@ export default function AdminModules() {
                           <input type="number" min={1} max={100} value={passPercent}
                             onChange={e => setPassPercent(Number(e.target.value))}
                             className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col">
+                          <label className="font-label font-semibold text-xs text-neutral-500 mb-2">Time Limit (seconds)</label>
+                          <input type="number" min={30} step={30} value={timeLimitSeconds}
+                            onChange={e => setTimeLimitSeconds(Number(e.target.value))}
+                            className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                        </div>
+                        <div className="flex flex-col justify-end">
+                          <label className="flex items-center gap-2 px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl cursor-pointer">
+                            <input type="checkbox" checked={shuffleQuestions}
+                              onChange={e => setShuffleQuestions(e.target.checked)}
+                              className="w-4 h-4 accent-orange-500 rounded" />
+                            <span className="text-sm font-semibold text-neutral-600">Shuffle question order</span>
+                          </label>
                         </div>
                       </div>
 

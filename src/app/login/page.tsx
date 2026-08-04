@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { dataService } from '@/lib/supabaseClient';
+import { dataService, supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +13,12 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [learnerCount, setLearnerCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'STUDENT')
+      .then(({ count }) => setLearnerCount(count ?? 0));
+  }, []);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) { setError('Please enter your email address.'); return; }
@@ -76,6 +82,17 @@ export default function LoginPage() {
           <p className="text-sm text-neutral-600 leading-relaxed max-w-sm">
             Join thousands of students at ThalirVerse and unlock a world of personalised education, interactive assessments, and a vibrant community.
           </p>
+
+          {learnerCount !== null && learnerCount > 0 && (
+            <div className="mt-6 inline-flex items-center gap-2.5 bg-white rounded-2xl shadow-md border border-orange-100 px-4 py-3">
+              <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-orange-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
+              </div>
+              <p className="text-sm font-bold text-neutral-800">
+                {learnerCount.toLocaleString()}+ active learners today
+              </p>
+            </div>
+          )}
         </div>
 
       </div>

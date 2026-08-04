@@ -5,6 +5,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
 
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default function QuizQuestion({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
   const router  = useRouter();
@@ -28,7 +37,12 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
         setStudent(s);
         const c = await dataService.getModule(id);
         setCourse(c);
-        if (c?.quiz) setQuiz(c.quiz);
+        if (c?.quiz) {
+          const q = c.quiz.shuffle_questions
+            ? { ...c.quiz, questions: shuffled(c.quiz.questions ?? []) }
+            : c.quiz;
+          setQuiz(q);
+        }
       } catch { /* silent */ }
       finally { setLoading(false); }
     })();

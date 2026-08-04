@@ -131,7 +131,7 @@ export const dataService = {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, full_name')
+      .select('role, full_name, xp')
       .eq('id', user.id)
       .single();
 
@@ -149,6 +149,7 @@ export const dataService = {
       district: user.user_metadata.district || '',
       region: user.user_metadata.region || getRegionFromDistrict(user.user_metadata.district || ''),
       role: profile?.role || 'STUDENT',
+      xp: profile?.xp ?? 0,
     };
   },
 
@@ -275,12 +276,17 @@ export const dataService = {
     if (error) throw error;
   },
 
-  async saveQuiz(moduleId: string, title: string, passPercentage: number, questions: any[]) {
+  async saveQuiz(
+    moduleId: string, title: string, passPercentage: number, questions: any[],
+    options?: { timeLimitSeconds?: number; shuffleQuestions?: boolean }
+  ) {
     const quizId = `quiz-${moduleId}`;
 
     const { error: qzErr } = await supabase.from('quizzes').upsert({
       id: quizId, module_id: moduleId, title,
       pass_percentage: passPercentage, retry_limit: 3, is_published: true,
+      time_limit_seconds: options?.timeLimitSeconds ?? 300,
+      shuffle_questions: options?.shuffleQuestions ?? false,
     }, { onConflict: 'id' });
     if (qzErr) throw qzErr;
 
@@ -316,12 +322,12 @@ export const dataService = {
   },
 
   async getAllProgress() {
-    const { data } = await supabase.from('progress').select('student_id,module_id,lesson_id,status');
+    const { data } = await supabase.from('progress').select('student_id,module_id,lesson_id,status,completed_at');
     return data ?? [];
   },
 
   async getAllQuizAttempts() {
-    const { data } = await supabase.from('quiz_attempts').select('student_id,quiz_id,score,passed');
+    const { data } = await supabase.from('quiz_attempts').select('student_id,quiz_id,score,passed,attempted_at');
     return data ?? [];
   },
 

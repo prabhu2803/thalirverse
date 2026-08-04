@@ -6,9 +6,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
 
 const NAV_LINKS = [
+  { label: 'Home',         href: '/',          icon: 'home' },
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
   { label: 'Explore',      href: '/explore',   icon: 'search' },
   { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'Community',    href: '#',          icon: 'groups', disabled: true },
 ];
 
 type NotifType = 'achievement' | 'module' | 'reminder' | 'certificate';
@@ -260,6 +262,16 @@ export default function Notifications() {
                 link.label === 'Explore'      ? pathname.startsWith('/explore') :
                 link.label === 'Achievements' ? pathname.startsWith('/profile') :
                 false;
+              if ((link as any).disabled) {
+                return (
+                  <span key={link.label}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold text-neutral-300 cursor-not-allowed select-none">
+                    <span className="material-symbols-outlined">{link.icon}</span>
+                    {link.label}
+                    <span className="ml-auto text-[9px] font-black uppercase tracking-wider">Soon</span>
+                  </span>
+                );
+              }
               return (
                 <Link key={link.label} href={link.href}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold transition-all ${

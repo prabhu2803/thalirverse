@@ -22,13 +22,6 @@ function computeStreak(progress: any[]): number {
   return streak;
 }
 
-function computeXP(progress: any[], quizAttempts: any[]): number {
-  return (
-    progress.filter(p => p.status === 'COMPLETED').length * 10 +
-    quizAttempts.filter(a => a.passed).length * 100
-  );
-}
-
 function getModuleProgress(moduleId: string, lessons: any[], progress: any[], quizAttempts: any[]) {
   if (!lessons?.length) {
     const passed = quizAttempts.some(a => a.quiz_id === `quiz-${moduleId}` && a.passed);
@@ -40,9 +33,11 @@ function getModuleProgress(moduleId: string, lessons: any[], progress: any[], qu
 }
 
 const NAV_LINKS = [
+  { label: 'Home',         href: '/',          icon: 'home' },
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
   { label: 'Explore',      href: '/explore',   icon: 'search' },
   { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'Community',    href: '#',          icon: 'groups', disabled: true },
 ];
 
 const MODULE_ICONS: Record<string, string> = {
@@ -99,7 +94,7 @@ export default function Dashboard() {
   }, []);
 
   const streak  = useMemo(() => computeStreak(progress), [progress]);
-  const xp      = useMemo(() => computeXP(progress, quizAttempts), [progress, quizAttempts]);
+  const xp      = student?.xp ?? 0;
   const initials = useMemo(() => {
     if (!student?.fullName) return '?';
     const parts = student.fullName.trim().split(' ');

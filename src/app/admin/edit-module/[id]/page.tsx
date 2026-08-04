@@ -39,6 +39,8 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
   const [includeQuiz, setIncludeQuiz] = useState(false);
   const [quizTitle, setQuizTitle] = useState('');
   const [passPercentage, setPassPercentage] = useState(80);
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(300);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -61,6 +63,8 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
           setIncludeQuiz(true);
           setQuizTitle(item.quiz.title || '');
           setPassPercentage(item.quiz.pass_percentage || 80);
+          setTimeLimitSeconds(item.quiz.time_limit_seconds || 300);
+          setShuffleQuestions(item.quiz.shuffle_questions || false);
           const qs = (item.quiz.questions || []).map((q: any) => ({
             ...q,
             answers: (q.answers || []).map((a: any) => ({
@@ -71,6 +75,8 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
           setQuestions(qs.length > 0 ? qs : [makeQuestion(id, 0)]);
         } else {
           setQuizTitle(`${item.title} Quiz`);
+          setTimeLimitSeconds(300);
+          setShuffleQuestions(false);
           setQuestions([makeQuestion(id, 0)]);
         }
       } catch (e) {
@@ -153,7 +159,9 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
       );
 
       if (includeQuiz && questions.some(q => q.question_text.trim())) {
-        await dataService.saveQuiz(id, quizTitle || `${title} Quiz`, passPercentage, questions);
+        await dataService.saveQuiz(id, quizTitle || `${title} Quiz`, passPercentage, questions, {
+          timeLimitSeconds, shuffleQuestions,
+        });
       }
 
       setSuccessMsg('Module saved successfully!');
@@ -315,6 +323,23 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
                     <input type="number" min={1} max={100} value={passPercentage}
                       onChange={e => setPassPercentage(Number(e.target.value))}
                       className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex flex-col">
+                    <label className="font-label font-semibold text-xs text-neutral-500 mb-2">Time Limit (seconds)</label>
+                    <input type="number" min={30} step={30} value={timeLimitSeconds}
+                      onChange={e => setTimeLimitSeconds(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                  </div>
+                  <div className="sm:col-span-2 flex flex-col justify-end">
+                    <label className="flex items-center gap-2 px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl cursor-pointer w-fit">
+                      <input type="checkbox" checked={shuffleQuestions}
+                        onChange={e => setShuffleQuestions(e.target.checked)}
+                        className="w-4 h-4 accent-orange-500 rounded" />
+                      <span className="text-sm font-semibold text-neutral-600">Shuffle question order for students</span>
+                    </label>
                   </div>
                 </div>
 

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   full_name VARCHAR(255) NOT NULL,
   mobile VARCHAR(20) UNIQUE,
   role public.user_role DEFAULT 'STUDENT',
+  xp INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,6 +91,8 @@ CREATE TABLE IF NOT EXISTS public.quizzes (
   title VARCHAR(255) NOT NULL,
   pass_percentage INTEGER DEFAULT 80,
   retry_limit INTEGER DEFAULT 3,
+  time_limit_seconds INTEGER NOT NULL DEFAULT 300,
+  shuffle_questions BOOLEAN NOT NULL DEFAULT false,
   is_published BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

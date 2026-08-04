@@ -6,9 +6,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { dataService, supabase, getRegionFromDistrict } from '@/lib/supabaseClient';
 
 const NAV_LINKS = [
+  { label: 'Home',         href: '/',          icon: 'home' },
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
   { label: 'Explore',      href: '/explore',   icon: 'search' },
   { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'Community',    href: '#',          icon: 'groups', disabled: true },
 ];
 
 const BADGE_ICONS: Record<string, string> = {
@@ -90,10 +92,7 @@ export default function Profile() {
 
   const completedModules = useMemo(() => modules.filter(m => isModuleComplete(m)), [modules, moduleLessons, progress, quizAttempts]);
   const isGraduate       = modules.length > 0 && completedModules.length === modules.length;
-  const xp               = useMemo(() => (
-    progress.filter(p => p.status === 'COMPLETED').length * 10 +
-    quizAttempts.filter(a => a.passed).length * 100
-  ), [progress, quizAttempts]);
+  const xp                = student?.xp ?? 0;
 
   // Activity feed from progress records
   const allActivity = useMemo(() =>

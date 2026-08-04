@@ -66,9 +66,63 @@ export default function SuperAdminAnalytics() {
   const totalStudents = students.length;
   const graduates = students.filter(s => isGraduate(s.id));
   const active = students.filter(s => !isGraduate(s.id) && studentModuleCompletionCount(s.id) > 0);
+  const notStarted = students.filter(s => !isGraduate(s.id) && studentModuleCompletionCount(s.id) === 0);
   const avgCompletion = totalStudents > 0 && modules.length > 0
     ? Math.round(students.reduce((acc, s) => acc + studentModuleCompletionCount(s.id), 0) / (totalStudents * modules.length) * 100)
     : 0;
+
+  // ── Student status distribution ─────────────────────────────────
+  const statusSegments = [
+    { label: 'Active',      count: graduates.length,  color: 'bg-green-500' },
+    { label: 'In Progress', count: active.length,     color: 'bg-orange-500' },
+    { label: 'Not Started', count: notStarted.length, color: 'bg-neutral-300' },
+  ];
+
+  // ── Recent activity feed ──────────────────────────────────────
+  const studentNameById: Record<string, string> = {};
+  students.forEach(s => { studentNameById[s.id] = s.full_name; });
+  const lessonInfoById: Record<string, { lessonTitle: string; moduleTitle: string }> = {};
+  const moduleTitleById: Record<string, string> = {};
+  modules.forEach(m => {
+    moduleTitleById[m.id] = m.title;
+    (m.lessons ?? []).forEach((l: any) => {
+      lessonInfoById[l.id] = { lessonTitle: l.title, moduleTitle: m.title };
+    });
+  });
+
+  const recentActivity = [
+    ...allProgress
+      .filter(p => p.status === 'COMPLETED' && p.completed_at)
+      .map(p => ({
+        studentName: studentNameById[p.student_id] ?? 'Unknown Student',
+        text: `Completed "${lessonInfoById[p.lesson_id]?.lessonTitle ?? 'a lesson'}"`,
+        module: lessonInfoById[p.lesson_id]?.moduleTitle ?? '—',
+        status: 'completed' as 'completed' | 'passed' | 'failed',
+        at: p.completed_at as string,
+      })),
+    ...allQuizAttempts
+      .filter(a => a.attempted_at)
+      .map(a => ({
+        studentName: studentNameById[a.student_id] ?? 'Unknown Student',
+        text: `${a.passed ? 'Passed' : 'Failed'} "${moduleTitleById[a.quiz_id?.replace('quiz-', '')] ?? 'a quiz'}" (${a.score}%)`,
+        module: moduleTitleById[a.quiz_id?.replace('quiz-', '')] ?? '—',
+        status: (a.passed ? 'passed' : 'failed') as 'completed' | 'passed' | 'failed',
+        at: a.attempted_at as string,
+      })),
+  ]
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 20);
+
+  const relativeTime = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
 
   // ── Module breakdown ──────────────────────────────────────────
   const moduleStats = modules.map(m => {
@@ -182,6 +236,36 @@ export default function SuperAdminAnalytics() {
           ))}
         </section>
 
+        {/* ── Student status distribution ── */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-headline font-black">Student Status Distribution</h2>
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6">
+            {totalStudents === 0 ? (
+              <p className="text-sm text-neutral-400">No students yet.</p>
+            ) : (
+              <>
+                <div className="flex w-full h-3 rounded-full overflow-hidden gap-0.5">
+                  {statusSegments.filter(s => s.count > 0).map(s => (
+                    <div key={s.label} className={`${s.color} h-full`}
+                      style={{ width: `${(s.count / totalStudents) * 100}%` }} />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-8 gap-y-2 mt-5">
+                  {statusSegments.map(s => (
+                    <div key={s.label} className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                      <span className="text-xs font-bold text-neutral-700">{s.label}</span>
+                      <span className="text-xs text-neutral-400">
+                        {s.count} ({totalStudents > 0 ? Math.round((s.count / totalStudents) * 100) : 0}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
         {/* ── Module completion rates ── */}
         <section className="space-y-4">
           <h2 className="text-lg font-headline font-black">Module Completion Rates</h2>
@@ -279,6 +363,35 @@ export default function SuperAdminAnalytics() {
             </div>
           </section>
         </div>
+
+        {/* ── Recent activity ── */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-headline font-black">Recent Activity</h2>
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+            {recentActivity.length === 0 ? (
+              <p className="p-6 text-sm text-neutral-400">No activity yet.</p>
+            ) : (
+              <ul className="divide-y divide-neutral-100 max-h-96 overflow-y-auto">
+                {recentActivity.map((item, i) => (
+                  <li key={i} className="flex items-center gap-4 px-6 py-3.5">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      item.status === 'failed' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'
+                    }`}>
+                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        {item.status === 'failed' ? 'close' : item.status === 'passed' ? 'workspace_premium' : 'check'}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-neutral-800 truncate">{item.studentName}</p>
+                      <p className="text-xs text-neutral-500 truncate">{item.text} · {item.module}</p>
+                    </div>
+                    <span className="text-xs text-neutral-400 shrink-0">{relativeTime(item.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
 
         {/* ── School stats ── */}
         <section className="space-y-4 pb-4">
