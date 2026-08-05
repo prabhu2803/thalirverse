@@ -184,14 +184,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Help footer */}
-          <p className="mt-8 text-center text-xs text-neutral-400">
-            Need help?{' '}
-            <Link href="mailto:support@thalirverse.com" className="font-bold text-orange-500 hover:text-orange-600 transition-colors">
-              Contact our Support Team
-            </Link>
-          </p>
         </div>
       </div>
     </main>
