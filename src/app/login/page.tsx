@@ -40,7 +40,12 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col lg:flex-row font-body">
+    <main className="relative min-h-screen flex flex-col lg:flex-row font-body">
+      {/* Floating Back Button */}
+      <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 text-neutral-500 hover:text-orange-500 transition-colors font-bold text-sm z-50">
+        <span className="material-symbols-outlined">arrow_back</span>
+        Back to Home
+      </Link>
 
       {/* ── Left Panel ─────────────────────────────────────────────── */}
       <div className="relative hidden lg:flex lg:w-1/2 bg-orange-50 flex-col justify-between p-12 overflow-hidden min-h-screen">
