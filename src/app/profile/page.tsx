@@ -28,6 +28,7 @@ export default function Profile() {
   const [loading,          setLoading]          = useState(true);
   const [isModalOpen,      setIsModalOpen]      = useState(false);
   const [showAllActivity,  setShowAllActivity]  = useState(false);
+  const [mobileNavOpen,    setMobileNavOpen]    = useState(false);
   const [lessonMap,        setLessonMap]        = useState<Record<string, { title: string; moduleId: string }>>({});
   const [moduleLessons,    setModuleLessons]    = useState<Record<string, string[]>>({});
 
@@ -92,12 +93,39 @@ export default function Profile() {
   const isGraduate       = modules.length > 0 && completedModules.length === modules.length;
   const xp                = student?.xp ?? 0;
 
-  // Activity feed from progress records
-  const allActivity = useMemo(() =>
-    progress
-      .filter(p => p.completed_at)
-      .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()),
-  [progress]);
+  // Learning History timeline — completed lessons + "started module" milestones
+  type TimelineItem = { type: 'completed' | 'started'; title: string; moduleTitle: string; at: string };
+
+  const allActivity = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    progress.filter(p => p.completed_at).forEach(p => {
+      const lessonInfo = lessonMap[p.lesson_id];
+      const mod = modules.find(m => m.id === (p.module_id ?? lessonInfo?.moduleId));
+      items.push({
+        type: 'completed',
+        title: lessonInfo?.title ?? 'Lesson',
+        moduleTitle: mod?.title ?? '',
+        at: p.completed_at,
+      });
+    });
+
+    // Earliest progress row per module marks when the student started it
+    const startedByModule = new Map<string, string>();
+    progress.forEach(p => {
+      const moduleId = p.module_id ?? lessonMap[p.lesson_id]?.moduleId;
+      const at = p.created_at;
+      if (!moduleId || !at) return;
+      const existing = startedByModule.get(moduleId);
+      if (!existing || new Date(at).getTime() < new Date(existing).getTime()) startedByModule.set(moduleId, at);
+    });
+    startedByModule.forEach((at, moduleId) => {
+      const mod = modules.find(m => m.id === moduleId);
+      if (mod) items.push({ type: 'started', title: `Started ${mod.title}`, moduleTitle: mod.title, at });
+    });
+
+    return items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [progress, lessonMap, modules]);
 
   const activityFeed = useMemo(
     () => showAllActivity ? allActivity : allActivity.slice(0, 5),
@@ -216,9 +244,77 @@ export default function Profile() {
         </div>
       </aside>
 
+      {/* ── Mobile top bar ──────────────────────────────────────── */}
+      <header className="lg:hidden fixed top-0 w-full z-40 bg-white border-b border-neutral-100 h-16 flex items-center justify-between px-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setMobileNavOpen(true)} className="material-symbols-outlined text-neutral-600 p-2 -ml-2" aria-label="Open menu">menu</button>
+          <span className="text-xl font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
+        </div>
+        <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-black">
+          {initials}
+        </div>
+      </header>
+
+      {/* ── Mobile nav drawer ───────────────────────────────────── */}
+      {mobileNavOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
+          <div className="relative w-72 max-w-[80vw] h-full bg-white flex flex-col">
+            <div className="p-6 flex items-center justify-between">
+              <span className="text-2xl font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
+              <button onClick={() => setMobileNavOpen(false)} className="material-symbols-outlined text-neutral-400 p-1" aria-label="Close menu">close</button>
+            </div>
+            <nav className="flex-1 px-4 space-y-1">
+              {NAV_LINKS.map(link => {
+                const isActive =
+                  link.label === 'My Learning'  ? pathname === '/dashboard' :
+                  link.label === 'Explore'      ? pathname.startsWith('/explore') :
+                  link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                  false;
+                return (
+                  <Link key={link.label} href={link.href} onClick={() => setMobileNavOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold transition-all ${
+                      isActive ? 'bg-orange-50 text-orange-600 font-bold' : 'text-neutral-500 hover:bg-orange-50 hover:text-orange-500'
+                    }`}>
+                    <span className="material-symbols-outlined" style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>{link.icon}</span>
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="p-6 border-t border-neutral-100">
+              <button
+                onClick={async () => { await dataService.signOut(); router.push('/login'); }}
+                className="flex items-center gap-3 px-4 py-2 text-neutral-500 hover:text-red-500 transition-colors w-full">
+                <span className="material-symbols-outlined">logout</span>
+                <span className="font-label text-sm font-semibold">Logout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile bottom nav ───────────────────────────────────── */}
+      <nav className="lg:hidden fixed bottom-0 w-full z-40 bg-white/95 backdrop-blur-md border-t border-neutral-100 flex justify-around items-center h-16">
+        {NAV_LINKS.map(link => {
+          const isActive =
+            link.label === 'My Learning'  ? pathname === '/dashboard' :
+            link.label === 'Explore'      ? pathname.startsWith('/explore') :
+            link.label === 'Achievements' ? pathname.startsWith('/profile') :
+            false;
+          return (
+            <Link key={link.label} href={link.href}
+              className={`flex flex-col items-center justify-center gap-0.5 p-2 ${isActive ? 'text-orange-500' : 'text-neutral-400'}`}>
+              <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>{link.icon}</span>
+              <span className={`font-label text-[10px] ${isActive ? 'font-bold' : ''}`}>{link.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
       {/* ── Main content ────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="px-8 py-8 space-y-8 min-h-full">
+      <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(255,153,51,0.08),transparent_70%)]">
+        <div className="px-4 pt-20 pb-24 lg:px-8 lg:py-8 space-y-8 min-h-full">
 
           {/* Profile hero — matches Stitch: large avatar, stats row, edit button */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 flex flex-col md:flex-row items-center md:items-start gap-8">
@@ -304,13 +400,13 @@ export default function Profile() {
                     const c = COLORS[m.id] ?? { grad: 'from-orange-400 to-orange-600', ring: 'ring-orange-200' };
                     return (
                       <div key={m.id}
-                        className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-center transition-all ${
+                        className={`group flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-center transition-all ${
                           earned
-                            ? 'bg-white border-neutral-100 shadow-sm hover:shadow-md hover:-translate-y-1'
-                            : 'bg-neutral-50 border-dashed border-neutral-200 opacity-50 grayscale'
+                            ? 'bg-white border-neutral-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-orange-200 cursor-pointer'
+                            : 'bg-neutral-50 border-dashed border-neutral-200 opacity-70'
                         }`}>
-                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${
-                          earned ? `bg-gradient-to-br ${c.grad} ring-4 ${c.ring}` : 'bg-neutral-200'
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform ${
+                          earned ? `bg-gradient-to-br ${c.grad} ring-4 ${c.ring} group-hover:scale-110` : 'bg-neutral-200'
                         }`}>
                           <span className="material-symbols-outlined text-white text-3xl"
                             style={{ fontVariationSettings: "'FILL' 1" }}>{earned ? icon : 'lock'}</span>
@@ -319,9 +415,14 @@ export default function Profile() {
                           <p className="text-xs font-black text-neutral-800 leading-tight">
                             {m.badge_title || m.title}
                           </p>
-                          <p className={`text-[10px] font-bold mt-1 ${earned ? 'text-orange-500' : 'text-neutral-400'}`}>
-                            {earned ? '✓ Earned' : 'Locked'}
-                          </p>
+                          {earned ? (
+                            <p className="text-[10px] font-bold mt-1 text-orange-500">✓ Earned</p>
+                          ) : (
+                            <div className="flex items-center justify-center gap-1 mt-1 text-neutral-400">
+                              <span className="material-symbols-outlined text-[11px]">lock</span>
+                              <p className="text-[10px] font-bold">Locked</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -343,17 +444,29 @@ export default function Profile() {
                     const date = attempt
                       ? new Date(attempt.attempted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                       : '';
+                    const verifyUrl = typeof window !== 'undefined' ? `${window.location.origin}/certificate/${student.id}` : '';
+                    const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(verifyUrl)}`;
                     return (
                       <div key={m.id} className="p-4 border border-orange-100 rounded-2xl bg-orange-50/40 flex flex-col gap-3">
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-orange-500 text-xl"
-                              style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-orange-500 text-xl"
+                                style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-sm font-bold text-neutral-800 truncate">{m.title}</h4>
+                              {date && <p className="text-xs text-neutral-400 font-label mt-0.5">Issued: {date}</p>}
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-bold text-neutral-800 truncate">{m.title}</h4>
-                            {date && <p className="text-xs text-neutral-400 font-label mt-0.5">Issued: {date}</p>}
-                          </div>
+                          {isGraduate && (
+                            <a href={shareUrl} target="_blank" rel="noreferrer" title="Share on LinkedIn"
+                              className="text-neutral-400 hover:text-[#0077b5] transition-colors shrink-0">
+                              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
+                              </svg>
+                            </a>
+                          )}
                         </div>
                         <button className="w-full flex items-center justify-center gap-1.5 py-2 bg-white border border-neutral-200 hover:border-orange-400 hover:text-orange-500 text-neutral-500 text-xs font-bold rounded-xl transition-all">
                           <span className="material-symbols-outlined text-sm">download</span>
@@ -455,22 +568,23 @@ export default function Profile() {
                     <div className="absolute left-[2.75rem] top-12 bottom-12 w-0.5 bg-neutral-100" />
                     <ul className="space-y-8 relative">
                       {activityFeed.map((item, i) => {
-                        const lessonInfo = lessonMap[item.lesson_id];
-                        const mod        = modules.find(m => m.id === (item.module_id ?? lessonInfo?.moduleId));
+                        const isCompleted = item.type === 'completed';
                         return (
                           <li key={i} className="flex gap-4">
-                            <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center z-10 ring-8 ring-white shadow-md shrink-0">
-                              <span className="material-symbols-outlined text-sm text-white"
-                                style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 ring-8 ring-white shrink-0 ${
+                              isCompleted ? 'bg-orange-500 shadow-md' : 'bg-orange-50 border-2 border-orange-400'
+                            }`}>
+                              <span className={`material-symbols-outlined text-sm ${isCompleted ? 'text-white' : 'text-orange-500'}`}
+                                style={{ fontVariationSettings: "'FILL' 1" }}>{isCompleted ? 'check' : 'play_circle'}</span>
                             </div>
                             <div className="pt-2 min-w-0">
                               <h3 className="text-sm font-bold text-neutral-800 leading-tight truncate">
-                                {lessonInfo?.title ?? 'Lesson'}
+                                {item.title}
                               </h3>
-                              {mod && <p className="text-xs text-neutral-500 mt-0.5 truncate">{mod.title}</p>}
+                              {isCompleted && item.moduleTitle && <p className="text-xs text-neutral-500 mt-0.5 truncate">{item.moduleTitle}</p>}
                               <p className="text-xs text-neutral-400 flex items-center gap-1 mt-1">
                                 <span className="material-symbols-outlined text-xs">calendar_today</span>
-                                {relativeTime(item.completed_at)}
+                                {relativeTime(item.at)}
                               </p>
                             </div>
                           </li>
@@ -503,8 +617,8 @@ export default function Profile() {
                     <span>Thalir Elite Level</span>
                     <span className="text-orange-500">{modules.length > 0 ? Math.round((completedModules.length / modules.length) * 100) : 0}%</span>
                   </div>
-                  <div className="h-2 bg-orange-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-orange-500 rounded-full transition-all duration-700"
+                  <div className="h-3 bg-orange-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-orange-500 rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(255,153,51,0.5)]"
                       style={{ width: `${modules.length > 0 ? (completedModules.length / modules.length) * 100 : 0}%` }} />
                   </div>
                 </div>
