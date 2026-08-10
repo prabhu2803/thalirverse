@@ -73,45 +73,78 @@ export default function SuperAdminAnalytics() {
 
   // ── Student status distribution ─────────────────────────────────
   const statusSegments = [
-    { label: 'Active',      count: graduates.length,  color: 'bg-green-500' },
-    { label: 'In Progress', count: active.length,     color: 'bg-orange-500' },
-    { label: 'Not Started', count: notStarted.length, color: 'bg-neutral-300' },
+    { label: 'Active',      count: graduates.length,  color: 'bg-green-500',  text: 'text-green-500' },
+    { label: 'In Progress', count: active.length,     color: 'bg-orange-500', text: 'text-orange-500' },
+    { label: 'Not Started', count: notStarted.length, color: 'bg-neutral-300', text: 'text-neutral-300' },
   ];
+  const donutCircumference = 100; // path below is normalized to a 100-unit perimeter
+  let donutCursor = 0;
+  const donutArcs = statusSegments.map(s => {
+    const pct = totalStudents > 0 ? (s.count / totalStudents) * donutCircumference : 0;
+    const arc = { ...s, pct, offset: -donutCursor };
+    donutCursor += pct;
+    return arc;
+  });
 
   // ── Recent activity feed ──────────────────────────────────────
   const studentNameById: Record<string, string> = {};
   students.forEach(s => { studentNameById[s.id] = s.full_name; });
-  const lessonInfoById: Record<string, { lessonTitle: string; moduleTitle: string }> = {};
+  const lessonInfoById: Record<string, { lessonTitle: string; moduleTitle: string; moduleId: string }> = {};
   const moduleTitleById: Record<string, string> = {};
   modules.forEach(m => {
     moduleTitleById[m.id] = m.title;
     (m.lessons ?? []).forEach((l: any) => {
-      lessonInfoById[l.id] = { lessonTitle: l.title, moduleTitle: m.title };
+      lessonInfoById[l.id] = { lessonTitle: l.title, moduleTitle: m.title, moduleId: m.id };
     });
   });
+
+  function moduleProgressPct(moduleId: string, studentId: string): number {
+    const mod = modules.find(m => m.id === moduleId);
+    if (!mod) return 0;
+    const lessons = mod.lessons ?? [];
+    if (!lessons.length) {
+      return allQuizAttempts.some(a => a.student_id === studentId && a.quiz_id === `quiz-${moduleId}` && a.passed) ? 100 : 0;
+    }
+    const done = lessons.filter((l: any) =>
+      allProgress.some(p => p.student_id === studentId && p.lesson_id === l.id && p.status === 'COMPLETED')
+    ).length;
+    return Math.round((done / lessons.length) * 100);
+  }
 
   const recentActivity = [
     ...allProgress
       .filter(p => p.status === 'COMPLETED' && p.completed_at)
       .map(p => ({
+        studentId: p.student_id as string,
         studentName: studentNameById[p.student_id] ?? 'Unknown Student',
         text: `Completed "${lessonInfoById[p.lesson_id]?.lessonTitle ?? 'a lesson'}"`,
         module: lessonInfoById[p.lesson_id]?.moduleTitle ?? '—',
-        status: 'completed' as 'completed' | 'passed' | 'failed',
+        moduleId: lessonInfoById[p.lesson_id]?.moduleId as string | undefined,
+        kind: 'completed' as 'completed' | 'passed' | 'failed',
         at: p.completed_at as string,
       })),
     ...allQuizAttempts
       .filter(a => a.attempted_at)
       .map(a => ({
+        studentId: a.student_id as string,
         studentName: studentNameById[a.student_id] ?? 'Unknown Student',
         text: `${a.passed ? 'Passed' : 'Failed'} "${moduleTitleById[a.quiz_id?.replace('quiz-', '')] ?? 'a quiz'}" (${a.score}%)`,
         module: moduleTitleById[a.quiz_id?.replace('quiz-', '')] ?? '—',
-        status: (a.passed ? 'passed' : 'failed') as 'completed' | 'passed' | 'failed',
+        moduleId: a.quiz_id?.replace('quiz-', '') as string | undefined,
+        kind: (a.passed ? 'passed' : 'failed') as 'completed' | 'passed' | 'failed',
         at: a.attempted_at as string,
       })),
   ]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 20);
+
+  function activityStatus(item: typeof recentActivity[number]): { label: string; cls: string } {
+    if (item.kind === 'failed') return { label: 'At Risk', cls: 'bg-red-100 text-red-700' };
+    const pct = item.moduleId ? moduleProgressPct(item.moduleId, item.studentId) : (item.kind === 'passed' ? 100 : 0);
+    if (pct >= 100) return { label: 'Completed', cls: 'bg-green-100 text-green-700' };
+    if (pct > 0) return { label: 'In Progress', cls: 'bg-blue-100 text-blue-700' };
+    return { label: 'Just Started', cls: 'bg-yellow-100 text-yellow-700' };
+  }
 
   const relativeTime = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -163,6 +196,33 @@ export default function SuperAdminAnalytics() {
     .map(([name, v]) => ({ name, ...v }))
     .sort((a, b) => b.students - a.students);
 
+  const handleExportReport = () => {
+    const lines: string[] = [
+      'ThalirVerse Performance Analytics Report', '',
+      'Summary',
+      `Total Students,${totalStudents}`,
+      `Graduates,${graduates.length}`,
+      `Completion Rate,${avgCompletion}%`,
+      `Active Learners,${active.length}`, '',
+      'Module Completion Rates',
+      'Module,Completed,Rate',
+      ...moduleStats.map(m => `${m.title},${m.completed}/${totalStudents},${m.rate}%`), '',
+      'Region Breakdown',
+      'Region,Students,Graduates,Rate',
+      ...regionStats.map(r => `${r.region},${r.count},${r.graduates},${r.rate}%`), '',
+      'School Breakdown',
+      'School,Students,Graduates,Completion',
+      ...schoolStats.map(s => `${s.name},${s.students},${s.graduates},${s.rate}%`),
+    ];
+    const csv = 'data:text/csv;charset=utf-8,' + lines.join('\n');
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csv));
+    link.setAttribute('download', 'thalirverse_analytics_report.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) return (
     <div className="flex justify-center items-center min-h-screen bg-white">
       <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
@@ -177,11 +237,39 @@ export default function SuperAdminAnalytics() {
       <AdminSidebar role={adminRole} adminName={adminName} />
 
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-neutral-100 h-16 flex items-center px-8 shadow-sm">
-          <h2 className="text-base font-headline font-bold text-neutral-700">Performance Analytics</h2>
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-neutral-100 h-16 flex items-center justify-between px-8 shadow-sm">
+          <h2 className="text-base font-headline font-bold text-neutral-700">Organizer Analytics Dashboard</h2>
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-neutral-800 leading-tight">{adminName}</p>
+              <p className="text-[10px] text-neutral-400 font-medium">{adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Course Admin'}</p>
+            </div>
+            <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-black ring-2 ring-orange-100">
+              {adminName.trim().split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+          </div>
         </header>
 
       <main className="px-8 pt-8 pb-12 space-y-10 max-w-7xl">
+
+        {/* ── Page header ── */}
+        <section className="flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+          <div>
+            <p className="text-orange-600 font-bold text-sm mb-1">OVERVIEW</p>
+            <h3 className="text-3xl font-black text-neutral-900 tracking-tight">Performance Analytics</h3>
+          </div>
+          <div className="flex gap-3">
+            <span className="flex items-center gap-2 bg-white border border-neutral-200 text-neutral-500 px-4 py-2 rounded-xl font-bold text-sm">
+              <span className="material-symbols-outlined text-lg">calendar_today</span>
+              All Time
+            </span>
+            <button onClick={handleExportReport}
+              className="flex items-center gap-2 bg-orange-600 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-lg shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95">
+              <span className="material-symbols-outlined text-lg">file_download</span>
+              Export Report
+            </button>
+          </div>
+        </section>
 
         {/* ── Summary cards ── */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
@@ -236,27 +324,69 @@ export default function SuperAdminAnalytics() {
           ))}
         </section>
 
-        {/* ── Student status distribution ── */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-headline font-black">Student Status Distribution</h2>
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6">
+        {/* ── Module completion chart + Student status donut ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Module Completion Rates — animated bar chart */}
+          <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-neutral-100">
+            <div className="mb-8">
+              <h5 className="text-xl font-bold text-neutral-900">Module Completion Rates</h5>
+              <p className="text-sm text-neutral-500">Progress by curriculum module</p>
+            </div>
+            {moduleStats.length === 0 ? (
+              <p className="text-sm text-neutral-400">No modules yet.</p>
+            ) : (
+              <div className="flex items-end justify-between h-64 gap-4 px-2">
+                {moduleStats.map(m => (
+                  <div key={m.id} className="flex-1 h-full flex flex-col items-center justify-end gap-2 group cursor-pointer">
+                    <div className="w-full h-full bg-orange-50 rounded-xl relative overflow-hidden">
+                      <div className={`absolute bottom-0 left-0 w-full rounded-xl transition-all duration-700 ${
+                        m.rate >= 75 ? 'bg-green-500' : m.rate >= 40 ? 'bg-orange-500' : 'bg-red-400'
+                      }`} style={{ height: `${m.rate}%` }} />
+                      <div className="absolute inset-x-0 top-2 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-black text-neutral-700 bg-white/90 px-1.5 py-0.5 rounded shadow-sm">{m.rate}%</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-neutral-400 text-center leading-tight">{m.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Student Status — donut chart */}
+          <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-neutral-100 flex flex-col items-center">
+            <div className="w-full mb-6">
+              <h5 className="text-xl font-bold text-neutral-900">Student Status</h5>
+              <p className="text-sm text-neutral-500">Distribution of all learners</p>
+            </div>
             {totalStudents === 0 ? (
-              <p className="text-sm text-neutral-400">No students yet.</p>
+              <p className="text-sm text-neutral-400 py-10">No students yet.</p>
             ) : (
               <>
-                <div className="flex w-full h-3 rounded-full overflow-hidden gap-0.5">
-                  {statusSegments.filter(s => s.count > 0).map(s => (
-                    <div key={s.label} className={`${s.color} h-full`}
-                      style={{ width: `${(s.count / totalStudents) * 100}%` }} />
-                  ))}
+                <div className="relative w-48 h-48 mb-8">
+                  <svg className="w-full h-full" viewBox="0 0 36 36">
+                    <path className="text-neutral-100" stroke="currentColor" strokeWidth="4" fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    {donutArcs.filter(a => a.pct > 0).map(a => (
+                      <path key={a.label} className={a.text} stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round"
+                        strokeDasharray={`${a.pct}, 100`} strokeDashoffset={a.offset}
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    ))}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-black text-neutral-900">{totalStudents}</span>
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tighter">Total Students</span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-x-8 gap-y-2 mt-5">
+                <div className="w-full space-y-3">
                   {statusSegments.map(s => (
-                    <div key={s.label} className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
-                      <span className="text-xs font-bold text-neutral-700">{s.label}</span>
-                      <span className="text-xs text-neutral-400">
-                        {s.count} ({totalStudents > 0 ? Math.round((s.count / totalStudents) * 100) : 0}%)
+                    <div key={s.label} className="flex justify-between items-center bg-neutral-50 p-3 rounded-2xl">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${s.color}`} />
+                        <span className="text-sm font-bold text-neutral-600">{s.label}</span>
+                      </div>
+                      <span className="text-sm font-black text-neutral-900">
+                        {totalStudents > 0 ? Math.round((s.count / totalStudents) * 100) : 0}%
                       </span>
                     </div>
                   ))}
@@ -264,36 +394,7 @@ export default function SuperAdminAnalytics() {
               </>
             )}
           </div>
-        </section>
-
-        {/* ── Module completion rates ── */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-headline font-black">Module Completion Rates</h2>
-          {moduleStats.length === 0 ? (
-            <p className="text-sm text-neutral-400">No modules yet.</p>
-          ) : (
-            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 space-y-5">
-              {moduleStats.map(m => (
-                <div key={m.id}>
-                  <div className="flex justify-between items-center mb-2">
-                    <div>
-                      <span className="text-sm font-bold text-neutral-800">{m.title}</span>
-                      <span className="text-xs text-neutral-400 ml-2">{m.completed}/{totalStudents} students</span>
-                    </div>
-                    <span className={`text-sm font-black ${m.rate >= 75 ? 'text-green-600' : m.rate >= 40 ? 'text-orange-500' : 'text-red-500'}`}>
-                      {m.rate}%
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-neutral-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all duration-700 ${
-                      m.rate >= 75 ? 'bg-green-500' : m.rate >= 40 ? 'bg-orange-500' : 'bg-red-400'
-                    }`} style={{ width: `${m.rate}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
 
         {/* ── Region + District breakdown ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -366,29 +467,63 @@ export default function SuperAdminAnalytics() {
 
         {/* ── Recent activity ── */}
         <section className="space-y-4">
-          <h2 className="text-lg font-headline font-black">Recent Activity</h2>
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-headline font-black">Recent Activity</h2>
+              <p className="text-sm text-neutral-500">Monitor student engagement in real-time</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm p-8">
             {recentActivity.length === 0 ? (
-              <p className="p-6 text-sm text-neutral-400">No activity yet.</p>
+              <p className="text-sm text-neutral-400">No activity yet.</p>
             ) : (
-              <ul className="divide-y divide-neutral-100 max-h-96 overflow-y-auto">
-                {recentActivity.map((item, i) => (
-                  <li key={i} className="flex items-center gap-4 px-6 py-3.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                      item.status === 'failed' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'
-                    }`}>
-                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>
-                        {item.status === 'failed' ? 'close' : item.status === 'passed' ? 'workspace_premium' : 'check'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-neutral-800 truncate">{item.studentName}</p>
-                      <p className="text-xs text-neutral-500 truncate">{item.text} · {item.module}</p>
-                    </div>
-                    <span className="text-xs text-neutral-400 shrink-0">{relativeTime(item.at)}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-neutral-100 text-left sticky top-0 bg-white">
+                      <th className="pb-4 font-bold text-neutral-400 text-xs uppercase tracking-widest">Student</th>
+                      <th className="pb-4 font-bold text-neutral-400 text-xs uppercase tracking-widest">Module</th>
+                      <th className="pb-4 font-bold text-neutral-400 text-xs uppercase tracking-widest">Progress</th>
+                      <th className="pb-4 font-bold text-neutral-400 text-xs uppercase tracking-widest">Status</th>
+                      <th className="pb-4 font-bold text-neutral-400 text-xs uppercase tracking-widest text-right">Last Access</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-50">
+                    {recentActivity.map((item, i) => {
+                      const status = activityStatus(item);
+                      const pct = item.moduleId ? moduleProgressPct(item.moduleId, item.studentId) : (item.kind === 'passed' ? 100 : 0);
+                      const initials = item.studentName.trim().split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+                      return (
+                        <tr key={i} className="hover:bg-orange-50/30 transition-colors">
+                          <td className="py-4 pr-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-black shrink-0">
+                                {initials}
+                              </div>
+                              <span className="font-bold text-neutral-800 text-sm truncate">{item.studentName}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <span className="text-sm text-neutral-600 font-medium">{item.module}</span>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <div className="w-24 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                              <div className="bg-orange-500 h-full rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-neutral-400 mt-1 block">{pct}% Complete</span>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${status.cls}`}>{status.label}</span>
+                          </td>
+                          <td className="py-4 text-right">
+                            <span className="text-sm text-neutral-500">{relativeTime(item.at)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </section>
@@ -433,6 +568,16 @@ export default function SuperAdminAnalytics() {
 
       </main>
       </div>
+
+      {adminRole === 'SUPER_ADMIN' && (
+        <Link href="/admin/modules"
+          className="fixed bottom-8 right-8 w-14 h-14 bg-orange-600 text-white rounded-full shadow-2xl shadow-orange-300 flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group">
+          <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>add</span>
+          <div className="absolute right-16 bg-neutral-900 text-white text-xs font-bold py-2 px-4 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+            Create New Course
+          </div>
+        </Link>
+      )}
     </div>
   );
 }
