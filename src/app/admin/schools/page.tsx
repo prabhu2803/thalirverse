@@ -27,30 +27,41 @@ export default function AdminSchools() {
   const [schoolSaving, setSchoolSaving] = useState(false);
   const [schoolDeleteTarget, setSchoolDeleteTarget] = useState<any>(null);
   const [formError, setFormError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     async function load() {
-      const admin = await dataService.getActiveStudent();
-      if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
-      setAdminRole(admin.role);
-      setAdminName(admin.fullName || 'Admin');
-      await refresh();
-      setLoading(false);
+      try {
+        const admin = await dataService.getActiveStudent();
+        if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
+        setAdminRole(admin.role);
+        setAdminName(admin.fullName || 'Admin');
+        await refresh();
+      } catch (e: any) {
+        setLoadError(e?.message || 'Failed to load schools. Has sql/school_organizations.sql been run yet?');
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
 
   async function refresh() {
-    const [orgs, dir, students] = await Promise.all([
-      dataService.getOrganizations(),
-      dataService.getSchoolsDirectory(),
-      dataService.getStudents(),
-    ]);
-    setOrganizations(orgs);
-    setSchools(dir);
-    const counts: Record<string, number> = {};
-    students.forEach((s: any) => { if (s.school_id) counts[s.school_id] = (counts[s.school_id] ?? 0) + 1; });
-    setStudentCounts(counts);
+    try {
+      const [orgs, dir, students] = await Promise.all([
+        dataService.getOrganizations(),
+        dataService.getSchoolsDirectory(),
+        dataService.getStudents(),
+      ]);
+      setOrganizations(orgs);
+      setSchools(dir);
+      const counts: Record<string, number> = {};
+      students.forEach((s: any) => { if (s.school_id) counts[s.school_id] = (counts[s.school_id] ?? 0) + 1; });
+      setStudentCounts(counts);
+      setLoadError('');
+    } catch (e: any) {
+      setLoadError(e?.message || 'Failed to load schools. Has sql/school_organizations.sql been run yet?');
+    }
   }
 
   useEffect(() => {
@@ -82,9 +93,14 @@ export default function AdminSchools() {
 
   const handleDeleteOrg = async () => {
     if (!orgDeleteTarget) return;
-    await dataService.deleteOrganization(orgDeleteTarget.id);
-    setOrgDeleteTarget(null);
-    await refresh();
+    try {
+      await dataService.deleteOrganization(orgDeleteTarget.id);
+      setOrgDeleteTarget(null);
+      await refresh();
+    } catch (e: any) {
+      setLoadError(e?.message || 'Failed to delete organization.');
+      setOrgDeleteTarget(null);
+    }
   };
 
   const handleSaveSchool = async () => {
@@ -117,9 +133,14 @@ export default function AdminSchools() {
 
   const handleDeleteSchool = async () => {
     if (!schoolDeleteTarget) return;
-    await dataService.deleteSchool(schoolDeleteTarget.id);
-    setSchoolDeleteTarget(null);
-    await refresh();
+    try {
+      await dataService.deleteSchool(schoolDeleteTarget.id);
+      setSchoolDeleteTarget(null);
+      await refresh();
+    } catch (e: any) {
+      setLoadError(e?.message || 'Failed to delete school.');
+      setSchoolDeleteTarget(null);
+    }
   };
 
   if (loading) return (
@@ -143,6 +164,12 @@ export default function AdminSchools() {
               Group multiple campuses of the same brand under one organization, or manage standalone schools.
             </p>
           </section>
+
+          {loadError && (
+            <div className="p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100 font-bold">
+              {loadError}
+            </div>
+          )}
 
           {/* Organizations */}
           <section className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6">

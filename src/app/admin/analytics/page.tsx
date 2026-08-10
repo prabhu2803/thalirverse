@@ -19,30 +19,41 @@ export default function SuperAdminAnalytics() {
   const [allProgress, setAllProgress] = useState<any[]>([]);
   const [allQuizAttempts, setAllQuizAttempts] = useState<any[]>([]);
   const [schoolsDirectory, setSchoolsDirectory] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     async function load() {
-      const admin = await dataService.getActiveStudent();
-      // Both YI_ADMIN and SUPER_ADMIN can view analytics
-      if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
-        router.push('/login');
-        return;
+      try {
+        const admin = await dataService.getActiveStudent();
+        // Both YI_ADMIN and SUPER_ADMIN can view analytics
+        if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
+          router.push('/login');
+          return;
+        }
+        setAdminRole(admin.role);
+        setAdminName(admin.fullName || 'Admin');
+        const [s, m, p, q] = await Promise.all([
+          dataService.getStudents(),
+          dataService.getModules(),
+          dataService.getAllProgress(),
+          dataService.getAllQuizAttempts(),
+        ]);
+        setStudents(s);
+        setModules(m);
+        setAllProgress(p);
+        setAllQuizAttempts(q);
+        // Organization rollups are additive — don't let a missing
+        // school_organizations.sql migration break the whole page.
+        try {
+          setSchoolsDirectory(await dataService.getSchoolsDirectory());
+        } catch {
+          setLoadError('Organization breakdown unavailable — sql/school_organizations.sql may not have been run yet.');
+        }
+      } catch (e: any) {
+        setLoadError(e?.message || 'Failed to load analytics.');
+      } finally {
+        setLoading(false);
       }
-      setAdminRole(admin.role);
-      setAdminName(admin.fullName || 'Admin');
-      const [s, m, p, q, dir] = await Promise.all([
-        dataService.getStudents(),
-        dataService.getModules(),
-        dataService.getAllProgress(),
-        dataService.getAllQuizAttempts(),
-        dataService.getSchoolsDirectory(),
-      ]);
-      setStudents(s);
-      setModules(m);
-      setAllProgress(p);
-      setAllQuizAttempts(q);
-      setSchoolsDirectory(dir);
-      setLoading(false);
     }
     load();
   }, []);
@@ -282,6 +293,12 @@ export default function SuperAdminAnalytics() {
             </button>
           </div>
         </section>
+
+        {loadError && (
+          <div className="p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100 font-bold">
+            {loadError}
+          </div>
+        )}
 
         {/* ── Summary cards ── */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
