@@ -102,7 +102,7 @@ export const dataService = {
     });
     if (error) throw error;
 
-    const profilePayload = { id: '', email, full_name: fullName, role: 'STUDENT', school, standard, district, region };
+    const profilePayload = { id: '', full_name: fullName, role: 'STUDENT', school, standard, district, region };
 
     if (!data.session) {
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -324,7 +324,7 @@ export const dataService = {
   async getStudents() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, school, standard, district, region, created_at')
+      .select('id, full_name, school, standard, district, region, created_at')
       .eq('role', 'STUDENT')
       .order('created_at', { ascending: false });
     if (error) throw error;

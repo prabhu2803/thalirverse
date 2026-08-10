@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { dataService, supabase } from '@/lib/supabaseClient';
+import { dataService } from '@/lib/supabaseClient';
 import AdminSidebar from './AdminSidebar';
 
 export default function AdminDashboard() {
@@ -25,9 +25,6 @@ export default function AdminDashboard() {
   // Delete student modal
   const [deleteStudentTarget, setDeleteStudentTarget] = useState<any>(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
-
-  // Toast for reset password
-  const [toast, setToast] = useState('');
 
   useEffect(() => {
     async function loadAdminData() {
@@ -66,7 +63,6 @@ export default function AdminDashboard() {
     const q = searchQuery.toLowerCase();
     setFilteredStudents(studentsList.filter(s =>
       s.full_name?.toLowerCase().includes(q) ||
-      s.email?.toLowerCase().includes(q) ||
       s.school?.toLowerCase().includes(q)
     ));
   }, [searchQuery, studentsList]);
@@ -90,20 +86,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleResetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
-      });
-      if (error) throw error;
-      setToast(`Reset email sent to ${email}`);
-    } catch (err: any) {
-      setToast(`Failed: ${err.message}`);
-    } finally {
-      setTimeout(() => setToast(''), 4000);
-    }
-  };
-
   const handleDeleteStudent = async () => {
     if (!deleteStudentTarget) return;
     setDeletingStudent(true);
@@ -120,9 +102,9 @@ export default function AdminDashboard() {
 
   const handleExportCSV = () => {
     if (filteredStudents.length === 0) return;
-    const headers = ['Full Name', 'Email', 'School', 'Standard', 'Lessons Completed'];
+    const headers = ['Full Name', 'School', 'Standard', 'Lessons Completed'];
     const rows = filteredStudents.map(s => [
-      s.full_name, s.email, s.school || '', s.standard || '',
+      s.full_name, s.school || '', s.standard || '',
       progressMap[s.id] ?? 0,
     ]);
     const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -214,7 +196,7 @@ export default function AdminDashboard() {
             <span className="material-symbols-outlined absolute left-3.5 top-3.5 text-neutral-400 text-sm">search</span>
             <input
               type="text"
-              placeholder="Search by name, school, or email..."
+              placeholder="Search by name or school..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all"
@@ -248,7 +230,6 @@ export default function AdminDashboard() {
                       <tr key={student.id} className="hover:bg-neutral-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="font-bold">{student.full_name}</div>
-                          <div className="text-xs text-neutral-400 mt-0.5">{student.email}</div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-medium text-neutral-700">{student.school || '—'}</div>
@@ -272,13 +253,6 @@ export default function AdminDashboard() {
                               className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all"
                             >
                               <span className="material-symbols-outlined text-lg">bar_chart</span>
-                            </button>
-                            <button
-                              onClick={() => handleResetPassword(student.email)}
-                              title="Reset Password"
-                              className="p-2 rounded-xl text-neutral-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
-                            >
-                              <span className="material-symbols-outlined text-lg">lock_reset</span>
                             </button>
                             <button
                               onClick={() => setDeleteStudentTarget(student)}
@@ -314,13 +288,6 @@ export default function AdminDashboard() {
         </section>
       </main>
 
-      {/* ── Toast notification ── */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-neutral-900 text-white text-sm font-bold px-5 py-3 rounded-2xl shadow-xl animate-[fade-in_0.2s_ease-out]">
-          {toast}
-        </div>
-      )}
-
       {/* ── View Progress Modal ── */}
       {progressStudent && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -328,7 +295,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-start p-6 border-b border-neutral-100 shrink-0">
               <div>
                 <h3 className="font-headline font-black text-lg">{progressStudent.full_name}</h3>
-                <p className="text-xs text-neutral-400 mt-0.5">{progressStudent.email}</p>
+                <p className="text-xs text-neutral-400 mt-0.5">{progressStudent.school || 'No school on file'}</p>
               </div>
               <button onClick={() => setProgressStudent(null)}
                 className="material-symbols-outlined text-neutral-400 hover:text-neutral-600 p-1 rounded-full transition-all">

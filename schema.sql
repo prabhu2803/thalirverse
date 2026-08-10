@@ -31,7 +31,6 @@ CREATE TYPE public.user_role AS ENUM ('STUDENT', 'YI_ADMIN', 'SUPER_ADMIN');
 
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY, -- Will map to auth.users.id
-  email VARCHAR(255) UNIQUE,
   full_name VARCHAR(255) NOT NULL,
   mobile VARCHAR(20) UNIQUE,
   role public.user_role DEFAULT 'STUDENT',
@@ -51,7 +50,6 @@ CREATE TABLE IF NOT EXISTS public.students (
   standard VARCHAR(50) NOT NULL, -- e.g., "11th Standard"
   section VARCHAR(10) DEFAULT 'A',
   gender VARCHAR(20) DEFAULT 'male',
-  dob DATE,
   district VARCHAR(100),
   parent_name VARCHAR(100),
   parent_mobile VARCHAR(20),
@@ -159,10 +157,9 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   -- Insert into profiles (safe: ignore duplicate id)
-  INSERT INTO public.profiles (id, email, full_name, mobile, role)
+  INSERT INTO public.profiles (id, full_name, mobile, role)
   VALUES (
     new.id,
-    new.email,
     COALESCE(new.raw_user_meta_data->>'fullName', 'New Student'),
     NULL,
     'STUDENT'
@@ -170,7 +167,7 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- Insert into students metadata (safe: ignore duplicate user_id)
-  INSERT INTO public.students (user_id, school_id, chapter_id, standard, section, gender, dob, district, parent_name, parent_mobile)
+  INSERT INTO public.students (user_id, school_id, chapter_id, standard, section, gender, district, parent_name, parent_mobile)
   VALUES (
     new.id,
     null, -- Mapped to school registry on update
@@ -178,7 +175,6 @@ BEGIN
     COALESCE(new.raw_user_meta_data->>'standard', '6th Standard'),
     COALESCE(new.raw_user_meta_data->>'section', 'A'),
     COALESCE(new.raw_user_meta_data->>'gender', 'male'),
-    null,
     NULLIF(COALESCE(new.raw_user_meta_data->>'district', ''), ''),
     NULLIF(COALESCE(new.raw_user_meta_data->>'parentName', ''), ''),
     NULLIF(COALESCE(new.raw_user_meta_data->>'parentMobile', ''), '')
@@ -198,7 +194,9 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 -- internally (the app generates a hidden placeholder at signup). This
 -- resolves "name typed at login" -> "email to authenticate with" without
 -- exposing the profiles table to anonymous users. Returns NULL (ambiguous
--- login) when zero or multiple students share that name.
+-- login) when zero or multiple students share that name. The email itself
+-- only exists in Supabase's own auth.users table — it is never stored on
+-- public.profiles.
 CREATE OR REPLACE FUNCTION public.resolve_login_email(p_full_name TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -208,10 +206,10 @@ AS $$
 DECLARE
   matches TEXT[];
 BEGIN
-  SELECT array_agg(email) INTO matches
-  FROM public.profiles
-  WHERE lower(trim(full_name)) = lower(trim(p_full_name))
-    AND email IS NOT NULL;
+  SELECT array_agg(u.email) INTO matches
+  FROM public.profiles p
+  JOIN auth.users u ON u.id = p.id
+  WHERE lower(trim(p.full_name)) = lower(trim(p_full_name));
 
   IF matches IS NULL OR array_length(matches, 1) <> 1 THEN
     RETURN NULL;
