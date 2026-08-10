@@ -58,29 +58,29 @@ export default function LoginPage() {
           </div>
 
           {/* Illustration thumbnail */}
-          <div className="rounded-2xl overflow-hidden shadow-lg mb-10 max-w-xs">
+          <div className="rounded-2xl overflow-hidden shadow-lg mb-10 max-w-xs mx-auto">
             <img
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJ9Ew6FJ1h88hvpP4SFDJ-qjXVg68_xE3u0FE_IXLAclxxz6eQxjyYhBR8wOfcf-RgAIf4bMYa9srKSAuupReOYdEGeJBKIVcwnHUw6bEkkUnPPb3yIXoQRWHEotLv8kywgDpdi_wTng2PTnT0VWZO3s4Qhkaojnjjer4POIW792XGfO8AzP6mfL-HRpMmYUQVlhmiGtGdjADrm9xjKCpawJuP7rVG6Ew0ePJhumM1VKTGq7x9JEKiBNAZIgAyRNZ-V1zgo9Q-U7A"
               alt="Students learning"
               className="w-full h-36 object-cover"
             />
             <div className="bg-white/80 backdrop-blur-sm px-4 py-2">
-              <p className="text-xs text-neutral-500 leading-snug">
+              <p className="text-xs text-neutral-500 leading-snug text-center">
                 Diverse students learning together with digital tools in a clean, youthful, and engaging educational environment.
               </p>
             </div>
           </div>
 
           {/* Headline */}
-          <h1 className="text-3xl lg:text-4xl font-headline font-black text-neutral-900 leading-tight mb-4">
+          <h1 className="text-3xl lg:text-4xl font-headline font-black text-neutral-900 leading-tight mb-4 text-center">
             Empower Your<br />Learning Journey
           </h1>
-          <p className="text-sm text-neutral-600 leading-relaxed max-w-sm">
+          <p className="text-sm text-neutral-600 leading-relaxed max-w-sm mx-auto text-center">
             Join thousands of students at ThalirVerse and unlock a world of personalised education, interactive assessments, and a vibrant community.
           </p>
 
           {learnerCount !== null && learnerCount > 0 && (
-            <div className="mt-6 inline-flex items-center gap-2.5 bg-white rounded-2xl shadow-md border border-orange-100 px-4 py-3">
+            <div className="mt-6 mx-auto w-fit flex items-center gap-2.5 bg-white rounded-2xl shadow-md border border-orange-100 px-4 py-3">
               <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-orange-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
               </div>
