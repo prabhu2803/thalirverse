@@ -374,6 +374,35 @@ export const dataService = {
     return data ?? [];
   },
 
+  async getChapters() {
+    const { data, error } = await supabase.from('chapters').select('id, name, city').order('name');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  // ── Super Admin: platform oversight ─────────────────────────────
+  async getAdmins() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, created_at')
+      .in('role', ['YI_ADMIN', 'SUPER_ADMIN'])
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async getContentStats() {
+    const [{ count: totalQuestions }, { data: quizzes }] = await Promise.all([
+      supabase.from('questions').select('id', { count: 'exact', head: true }),
+      supabase.from('quizzes').select('id, is_published'),
+    ]);
+    return {
+      totalQuestions: totalQuestions ?? 0,
+      totalQuizzes: quizzes?.length ?? 0,
+      publishedQuizzes: quizzes?.filter(q => q.is_published).length ?? 0,
+    };
+  },
+
   // ── School directory (organizations = brands, schools = campuses) ──
   async getSchoolsDirectory() {
     const { data, error } = await supabase

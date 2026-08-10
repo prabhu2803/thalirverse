@@ -19,6 +19,9 @@ export default function SuperAdminAnalytics() {
   const [allProgress, setAllProgress] = useState<any[]>([]);
   const [allQuizAttempts, setAllQuizAttempts] = useState<any[]>([]);
   const [schoolsDirectory, setSchoolsDirectory] = useState<any[]>([]);
+  const [chapters, setChapters] = useState<any[]>([]);
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [contentStats, setContentStats] = useState<{ totalQuestions: number; totalQuizzes: number; publishedQuizzes: number } | null>(null);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -45,9 +48,17 @@ export default function SuperAdminAnalytics() {
         // Organization rollups are additive — don't let a missing
         // school_organizations.sql migration break the whole page.
         try {
-          setSchoolsDirectory(await dataService.getSchoolsDirectory());
+          const [dir, ch] = await Promise.all([dataService.getSchoolsDirectory(), dataService.getChapters()]);
+          setSchoolsDirectory(dir);
+          setChapters(ch);
         } catch {
-          setLoadError('Organization breakdown unavailable — sql/school_organizations.sql may not have been run yet.');
+          setLoadError('Organization/Chapter breakdown unavailable — sql/school_organizations.sql may not have been run yet.');
+        }
+        // Platform-oversight widgets are Super Admin only.
+        if (admin.role === 'SUPER_ADMIN') {
+          const [adminList, stats] = await Promise.all([dataService.getAdmins(), dataService.getContentStats()]);
+          setAdmins(adminList);
+          setContentStats(stats);
         }
       } catch (e: any) {
         setLoadError(e?.message || 'Failed to load analytics.');
@@ -219,6 +230,30 @@ export default function SuperAdminAnalytics() {
     }))
     .sort((a, b) => b.students - a.students);
 
+  // ── Chapter breakdown (Super Admin only) ────────────────────────
+  const chapterMap: Record<string, { students: number; graduates: number }> = {};
+  students.forEach(s => {
+    const school = s.school_id ? schoolById[s.school_id] : null;
+    const chapterId = school?.chapter_id;
+    if (!chapterId) return; // no chapter assigned to this school
+    if (!chapterMap[chapterId]) chapterMap[chapterId] = { students: 0, graduates: 0 };
+    chapterMap[chapterId].students++;
+    if (isGraduate(s.id)) chapterMap[chapterId].graduates++;
+  });
+  const chapterStats = chapters
+    .map(c => {
+      const v = chapterMap[c.id] ?? { students: 0, graduates: 0 };
+      return { name: c.name, city: c.city, students: v.students, graduates: v.graduates,
+        rate: v.students > 0 ? Math.round((v.graduates / v.students) * 100) : 0 };
+    })
+    .filter(c => c.students > 0)
+    .sort((a, b) => b.students - a.students);
+
+  // ── Platform-wide average quiz score (Super Admin only) ─────────
+  const avgQuizScore = allQuizAttempts.length > 0
+    ? Math.round(allQuizAttempts.reduce((sum, a) => sum + a.score, 0) / allQuizAttempts.length)
+    : 0;
+
   // ── District breakdown ────────────────────────────────────────
   const districtMap: Record<string, { region: string; students: number; graduates: number }> = {};
   students.forEach(s => {
@@ -333,6 +368,74 @@ export default function SuperAdminAnalytics() {
             </div>
           ))}
         </section>
+
+        {/* ── Super Admin: platform oversight ── */}
+        {adminRole === 'SUPER_ADMIN' && (
+          <>
+            {/* Content Health */}
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-lg font-headline font-black">Content Health</h2>
+                <p className="text-sm text-neutral-500">Platform-wide, not scoped to any chapter.</p>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                  { label: 'Modules', value: modules.length, sub: `${modules.filter(m => m.is_published).length} published`, icon: 'auto_stories', iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
+                  { label: 'Lessons', value: modules.reduce((sum, m) => sum + (m.lessons?.length ?? 0), 0), sub: 'Across all modules', icon: 'play_circle', iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
+                  { label: 'Quizzes', value: contentStats?.totalQuizzes ?? 0, sub: `${contentStats?.publishedQuizzes ?? 0} published, ${contentStats?.totalQuestions ?? 0} questions`, icon: 'quiz', iconBg: 'bg-purple-50', iconColor: 'text-purple-600' },
+                  { label: 'Avg Quiz Score', value: `${avgQuizScore}%`, sub: `Across ${allQuizAttempts.length} attempts`, icon: 'grade', iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+                ].map(card => (
+                  <div key={card.label} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
+                    <div className={`w-12 h-12 ${card.iconBg} rounded-2xl flex items-center justify-center ${card.iconColor} mb-4`}>
+                      <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>{card.icon}</span>
+                    </div>
+                    <p className="text-gray-500 font-medium text-sm">{card.label}</p>
+                    <h4 className="text-2xl font-black text-slate-900 mt-1">{card.value}</h4>
+                    <p className="text-xs text-neutral-400 font-medium mt-2">{card.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Admin Directory */}
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-lg font-headline font-black">Admin Directory</h2>
+                <p className="text-sm text-neutral-500">Everyone with organizer or super admin access.</p>
+              </div>
+              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+                {admins.length === 0 ? (
+                  <p className="p-6 text-sm text-neutral-400">No admin accounts found.</p>
+                ) : (
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="bg-neutral-50 text-neutral-400 font-bold font-label uppercase text-[10px] tracking-wider border-b border-neutral-100">
+                        <th className="px-6 py-3">Name</th>
+                        <th className="px-6 py-3">Role</th>
+                        <th className="px-6 py-3 text-right">Added</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {admins.map(a => (
+                        <tr key={a.id} className="hover:bg-neutral-50/50 transition-colors">
+                          <td className="px-6 py-3 font-bold">{a.full_name}</td>
+                          <td className="px-6 py-3">
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded uppercase tracking-wider ${
+                              a.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}>{a.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Yi Admin'}</span>
+                          </td>
+                          <td className="px-6 py-3 text-right text-neutral-500">
+                            {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          </>
+        )}
 
         {/* ── Module completion chart + Student status donut ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -569,6 +672,45 @@ export default function SuperAdminAnalytics() {
                             <div className="h-full bg-orange-500 rounded-full" style={{ width: `${o.rate}%` }} />
                           </div>
                           <span className="text-xs font-bold text-neutral-600">{o.rate}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* ── Chapter stats (Super Admin only) ── */}
+        {adminRole === 'SUPER_ADMIN' && chapterStats.length > 0 && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-headline font-black">Chapter Breakdown</h2>
+              <p className="text-sm text-neutral-500">Students, graduates, and completion rolled up by Yi chapter.</p>
+            </div>
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="bg-neutral-50 text-neutral-400 font-bold font-label uppercase text-[10px] tracking-wider border-b border-neutral-100">
+                    <th className="px-6 py-3">Chapter</th>
+                    <th className="px-6 py-3 text-center">Students</th>
+                    <th className="px-6 py-3 text-center">Graduates</th>
+                    <th className="px-6 py-3 text-center">Completion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {chapterStats.map(c => (
+                    <tr key={c.name} className="hover:bg-neutral-50/50 transition-colors">
+                      <td className="px-6 py-3 font-bold">{c.name}</td>
+                      <td className="px-6 py-3 text-center">{c.students}</td>
+                      <td className="px-6 py-3 text-center text-green-600 font-bold">{c.graduates}</td>
+                      <td className="px-6 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-orange-500 rounded-full" style={{ width: `${c.rate}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-neutral-600">{c.rate}%</span>
                         </div>
                       </td>
                     </tr>
