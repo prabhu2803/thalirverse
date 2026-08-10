@@ -165,13 +165,25 @@ export const dataService = {
     return data;
   },
 
+  // ── Security-question password reset (no reachable email/phone) ──
+  async setSecurityAnswer(question: string, answer: string) {
+    const { error } = await supabase.rpc('set_security_answer', { p_question: question, p_answer: answer });
+    if (error) throw error;
+  },
+
+  async getSecurityQuestion(fullName: string) {
+    const { data, error } = await supabase.rpc('get_security_question', { p_full_name: fullName });
+    if (error) throw error;
+    return data as string | null;
+  },
+
   async getActiveStudent() {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return null;
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, full_name, xp')
+      .select('role, full_name, xp, security_question')
       .eq('id', user.id)
       .single();
 
@@ -190,6 +202,7 @@ export const dataService = {
       region: user.user_metadata.region || getRegionFromDistrict(user.user_metadata.district || ''),
       role: profile?.role || 'STUDENT',
       xp: profile?.xp ?? 0,
+      securityQuestion: profile?.security_question || '',
     };
   },
 

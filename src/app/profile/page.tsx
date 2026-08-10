@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { dataService, supabase, getRegionFromDistrict } from '@/lib/supabaseClient';
+import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
 
 const NAV_LINKS = [
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
@@ -42,6 +43,8 @@ export default function Profile() {
   const [confirmPassword,  setConfirmPassword]  = useState('');
   const [showNewPw,        setShowNewPw]        = useState(false);
   const [showConfirmPw,    setShowConfirmPw]    = useState(false);
+  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
+  const [securityAnswer,   setSecurityAnswer]   = useState('');
   const [saving,           setSaving]           = useState(false);
   const [successMsg,       setSuccessMsg]       = useState('');
   const [errorMsg,         setErrorMsg]         = useState('');
@@ -56,6 +59,7 @@ export default function Profile() {
       setStandard(s.standard || '');
       setSection(s.section || '');
       setDistrict(s.district || '');
+      setSecurityQuestion(s.securityQuestion || SECURITY_QUESTIONS[0]);
       const [prog, attempts, mods, lessonsData] = await Promise.all([
         dataService.getProgress(s.id),
         dataService.getQuizAttempts(s.id),
@@ -159,8 +163,11 @@ export default function Profile() {
         full_name: fullName, school, standard, district,
         region: getRegionFromDistrict(district),
       }).eq('id', student.id);
+      if (securityAnswer.trim()) {
+        await dataService.setSecurityAnswer(securityQuestion, securityAnswer.trim());
+      }
       setSuccessMsg('Profile updated successfully!');
-      setNewPassword(''); setConfirmPassword('');
+      setNewPassword(''); setConfirmPassword(''); setSecurityAnswer('');
       setTimeout(() => { setIsModalOpen(false); loadData(); }, 1200);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to save. Please try again.');
@@ -710,6 +717,24 @@ export default function Profile() {
                   </div>
                 </div>
               ))}
+
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest pt-2">
+                Security Question <span className="normal-case font-normal">(for password reset — leave answer blank to keep current)</span>
+              </p>
+
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-xs text-neutral-500 mb-2">Question</label>
+                <select value={securityQuestion} onChange={e => setSecurityQuestion(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm appearance-none transition-all">
+                  {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-xs text-neutral-500 mb-2">Answer</label>
+                <input type="text" value={securityAnswer} onChange={e => setSecurityAnswer(e.target.value)}
+                  placeholder={student?.securityQuestion ? 'Leave blank to keep current answer' : 'Set your answer'}
+                  className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+              </div>
 
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)}

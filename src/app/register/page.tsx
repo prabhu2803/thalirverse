@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
+import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
 
 export default function Register() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [gender, setGender] = useState('male');
+  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
+  const [securityAnswer, setSecurityAnswer] = useState('');
   const [school, setSchool] = useState('');
   const [standard, setStandard] = useState('');
   const [section, setSection] = useState('A');
@@ -50,6 +53,10 @@ export default function Register() {
       setError('Password must be at least 6 characters.');
       return;
     }
+    if (!securityAnswer.trim()) {
+      setError('Please answer the security question — it\'s how you\'ll reset your password if you forget it.');
+      return;
+    }
     setError('');
     setStep(2);
   };
@@ -67,6 +74,9 @@ export default function Register() {
     try {
       const result: any = await dataService.signUp(fullName, school, standard, section, district, password);
       if (result?.session) {
+        try {
+          await dataService.setSecurityAnswer(securityQuestion, securityAnswer.trim());
+        } catch { /* account is created either way; they can set this later via Edit Profile */ }
         router.push('/dashboard');
       } else {
         setError('Registration could not be completed. Please try again or contact your coordinator.');
@@ -175,6 +185,30 @@ export default function Register() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Security Question *</label>
+                <select
+                  value={securityQuestion}
+                  onChange={(e) => setSecurityQuestion(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
+                >
+                  {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+                </select>
+                <p className="text-xs text-neutral-400 mt-1.5">Used to reset your password if you forget it — no email needed.</p>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Your Answer *</label>
+                <input
+                  type="text"
+                  required
+                  value={securityAnswer}
+                  onChange={(e) => setSecurityAnswer(e.target.value)}
+                  placeholder="Your answer"
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white"
+                />
               </div>
 
               <div className="flex flex-col">
