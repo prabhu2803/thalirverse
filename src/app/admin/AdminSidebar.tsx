@@ -14,6 +14,7 @@ const SUPER_ADMIN_NAV = [
   { label: 'Analytics',      href: '/admin/analytics', icon: 'insights' },
   { label: 'Students',       href: '/admin',           icon: 'group' },
   { label: 'Schools',        href: '/admin/schools',   icon: 'apartment' },
+  { label: 'Team',           href: '/admin/team',      icon: 'admin_panel_settings' },
   { label: 'Course Builder', href: '/admin/modules',   icon: 'auto_stories' },
   { label: 'Quiz Builder',   href: '/admin/quizzes',   icon: 'quiz' },
 ];

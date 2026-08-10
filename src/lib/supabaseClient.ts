@@ -391,6 +391,29 @@ export const dataService = {
     return data ?? [];
   },
 
+  // admin_id -> [{ id, name }] for every assigned school, in one query.
+  async getAdminSchoolsMap() {
+    const { data, error } = await supabase.from('admin_schools').select('admin_id, schools(id, name)');
+    if (error) throw error;
+    const map: Record<string, { id: string; name: string }[]> = {};
+    (data ?? []).forEach((row: any) => {
+      if (!row.schools) return;
+      if (!map[row.admin_id]) map[row.admin_id] = [];
+      map[row.admin_id].push(row.schools);
+    });
+    return map;
+  },
+
+  async setAdminSchools(adminId: string, schoolIds: string[]) {
+    const { error: delError } = await supabase.from('admin_schools').delete().eq('admin_id', adminId);
+    if (delError) throw delError;
+    if (schoolIds.length === 0) return;
+    const { error: insError } = await supabase.from('admin_schools').insert(
+      schoolIds.map(schoolId => ({ admin_id: adminId, school_id: schoolId }))
+    );
+    if (insError) throw insError;
+  },
+
   async getContentStats() {
     const [{ count: totalQuestions }, { data: quizzes }] = await Promise.all([
       supabase.from('questions').select('id', { count: 'exact', head: true }),

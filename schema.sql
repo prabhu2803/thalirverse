@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS public.students (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Links admin accounts (YI_ADMIN / SUPER_ADMIN) to the schools they cover.
+-- Many-to-many: one admin can cover several schools; a school can have more than one admin.
+CREATE TABLE IF NOT EXISTS public.admin_schools (
+  admin_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (admin_id, school_id)
+);
+
 -- 5. Modules (Learning Tracks)
 CREATE TABLE IF NOT EXISTS public.modules (
   id VARCHAR(100) PRIMARY KEY, -- e.g., 'road-safety', 'masoom', 'entrepreneurship'
