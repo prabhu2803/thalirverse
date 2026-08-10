@@ -194,6 +194,35 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- Students log in with name + password; Supabase Auth still needs an email
+-- internally (the app generates a hidden placeholder at signup). This
+-- resolves "name typed at login" -> "email to authenticate with" without
+-- exposing the profiles table to anonymous users. Returns NULL (ambiguous
+-- login) when zero or multiple students share that name.
+CREATE OR REPLACE FUNCTION public.resolve_login_email(p_full_name TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  matches TEXT[];
+BEGIN
+  SELECT array_agg(email) INTO matches
+  FROM public.profiles
+  WHERE lower(trim(full_name)) = lower(trim(p_full_name))
+    AND email IS NOT NULL;
+
+  IF matches IS NULL OR array_length(matches, 1) <> 1 THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN matches[1];
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.resolve_login_email(TEXT) TO anon, authenticated;
+
 
 -- =======================================================
 -- INITIAL SEED RECORDS (Learning Syllabus)

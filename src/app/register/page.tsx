@@ -12,12 +12,9 @@ export default function Register() {
   const [step, setStep] = useState(1);
   
   // Fields state
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [dob, setDob] = useState('');
   const [gender, setGender] = useState('male');
   const [school, setSchool] = useState('');
   const [standard, setStandard] = useState('');
@@ -25,14 +22,13 @@ export default function Register() {
   const [district, setDistrict] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [emailSent, setEmailSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleNext = (e: { preventDefault(): void }) => {
     e.preventDefault();
-    if (!firstName || !lastName || !email) {
-      setError('Please fill out all required fields (First Name, Last Name, Email).');
+    if (!name.trim()) {
+      setError('Please enter your full name.');
       return;
     }
     if (!password) {
@@ -60,30 +56,17 @@ export default function Register() {
     setLoading(true);
     setError('');
 
-    const fullName = `${firstName} ${lastName}`;
-    const userEmail = email;
+    const fullName = name.trim();
     try {
-      const result: any = await dataService.signUp(userEmail, fullName, school, standard, section, district, password);
-
+      const result: any = await dataService.signUp(fullName, school, standard, section, district, password);
       if (result?.session) {
         router.push('/dashboard');
       } else {
-        // No session means email confirmation is required
-        setEmailSent(true);
+        setError('Registration could not be completed. Please try again or contact your coordinator.');
       }
     } catch (err: any) {
-      if (err?.code === 'email_not_confirmed' || err?.message?.includes('confirmation link')) {
-        setEmailSent(true);
-      } else if (err?.message?.includes('already registered') || err?.message?.includes('already exists')) {
-        setError('This email is already registered. Try logging in instead.');
-      } else if (err?.code === 'email_address_invalid' || err?.message?.includes('is invalid')) {
-        setError('Please use a valid email address to receive your confirmation link.');
-      } else if (err?.message?.includes('duplicate key') || err?.message?.includes('unique constraint')) {
-        setError('This email is already registered. Try logging in instead.');
-      } else if (err?.message?.includes('rate limit') || err?.message?.includes('email rate limit') || err?.status === 429) {
+      if (err?.message?.includes('rate limit') || err?.status === 429) {
         setError('Too many sign-up attempts. Please wait a few minutes and try again.');
-      } else if (err?.message?.includes('Unable to validate email address')) {
-        setError('This email address could not be validated. Please use a real, working email address.');
       } else {
         setError(err?.message || 'Registration failed. Please try again.');
       }
@@ -91,30 +74,6 @@ export default function Register() {
       setLoading(false);
     }
   };
-
-  if (emailSent) {
-    return (
-      <main className="relative min-h-screen bg-white dark:bg-neutral-950 flex justify-center items-center px-4">
-        <div className="max-w-md w-full text-center space-y-6 bg-white dark:bg-neutral-900 rounded-3xl shadow-xl border border-slate-100 dark:border-neutral-800 p-10">
-          <div className="w-20 h-20 rounded-full bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mx-auto">
-            <span className="material-symbols-outlined text-5xl text-orange-500">mark_email_unread</span>
-          </div>
-          <div>
-            <h2 className="text-2xl font-headline font-black text-neutral-900 dark:text-white">Check your email</h2>
-            <p className="text-neutral-500 dark:text-neutral-400 mt-2 text-sm">
-              We sent a confirmation link to <span className="font-bold text-neutral-700 dark:text-neutral-300">{email}</span>. Click it to activate your account, then log in.
-            </p>
-          </div>
-          <Link href="/login" className="inline-block w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition-all">
-            Go to Login
-          </Link>
-          <p className="text-xs text-neutral-400">
-            Didn&apos;t get it? Check your spam folder or ask your Yi coordinator to disable email confirmation for testing.
-          </p>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main className="relative min-h-screen bg-white dark:bg-neutral-950 py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
@@ -147,41 +106,19 @@ export default function Register() {
           {step === 1 ? (
             /* STEP 1: Student Information */
             <form onSubmit={handleNext} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">First Name *</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Arjun"
-                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
-                  />
-                </div>
-                <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Last Name *</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="M"
-                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
-                  />
-                </div>
-              </div>
-
               <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Email Address *</label>
-                <input 
-                  type="email" 
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Full Name *</label>
+                <input
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="arjun@school.edu"
-                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Arjun Kumar"
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white"
                 />
+                <p className="text-xs text-neutral-400 mt-1.5">
+                  This is what you&apos;ll type to log in, so use your real name exactly as you&apos;d like it to appear on your certificate.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -233,28 +170,17 @@ export default function Register() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Date of Birth</label>
-                  <input 
-                    type="date" 
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
-                  />
-                </div>
-                <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Gender</label>
-                  <select 
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
-                  >
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
+              <div className="flex flex-col">
+                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Gender</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
 
               <button

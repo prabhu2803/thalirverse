@@ -83,9 +83,18 @@ if (!g._supabase) {
 }
 export const supabase = g._supabase;
 
+// Students log in with just their name + password, but Supabase Auth still requires
+// an email internally — generate a hidden, never-shown placeholder for it.
+function makePlaceholderEmail(fullName: string) {
+  const slug = fullName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '') || 'student';
+  const suffix = Math.random().toString(36).slice(2, 10);
+  return `${slug}.${suffix}@students.thalirverse.internal`;
+}
+
 export const dataService = {
-  async signUp(email: string, fullName: string, school: string, standard: string, sec: string, district: string, password: string) {
+  async signUp(fullName: string, school: string, standard: string, sec: string, district: string, password: string) {
     const region = getRegionFromDistrict(district);
+    const email = makePlaceholderEmail(fullName);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -104,10 +113,7 @@ export const dataService = {
         );
         return signInData;
       }
-      throw Object.assign(
-        new Error('Please check your email and click the confirmation link before logging in.'),
-        { code: 'email_not_confirmed' }
-      );
+      throw new Error('Registration could not be completed. Please try again or contact your coordinator.');
     }
 
     if (data.user) {
@@ -119,7 +125,11 @@ export const dataService = {
     return data;
   },
 
-  async login(email: string, password: string) {
+  async login(fullName: string, password: string) {
+    const { data: email, error: lookupError } = await supabase.rpc('resolve_login_email', { p_full_name: fullName });
+    if (lookupError || !email) {
+      throw new Error("We couldn't find a single account with that exact name. Double-check the spelling, or ask your coordinator if another student shares your name.");
+    }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;

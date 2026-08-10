@@ -33,11 +33,9 @@ function getModuleProgress(moduleId: string, lessons: any[], progress: any[], qu
 }
 
 const NAV_LINKS = [
-  { label: 'Home',         href: '/',          icon: 'home' },
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
   { label: 'Explore',      href: '/explore',   icon: 'search' },
   { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
-  { label: 'Community',    href: '#',          icon: 'groups', disabled: true },
 ];
 
 const MODULE_ICONS: Record<string, string> = {

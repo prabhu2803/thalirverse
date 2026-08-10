@@ -6,11 +6,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { dataService, supabase, getRegionFromDistrict } from '@/lib/supabaseClient';
 
 const NAV_LINKS = [
-  { label: 'Home',         href: '/',          icon: 'home' },
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
   { label: 'Explore',      href: '/explore',   icon: 'search' },
   { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
-  { label: 'Community',    href: '#',          icon: 'groups', disabled: true },
 ];
 
 const BADGE_ICONS: Record<string, string> = {

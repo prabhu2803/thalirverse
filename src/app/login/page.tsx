@@ -7,7 +7,7 @@ import { dataService, supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -21,11 +21,11 @@ export default function LoginPage() {
   }, []);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) { setError('Please enter your email address.'); return; }
+    if (!name.trim()) { setError('Please enter your full name.'); return; }
     setLoading(true);
     setError('');
     try {
-      await dataService.login(email, password);
+      await dataService.login(name.trim(), password);
       let role = 'STUDENT';
       try {
         const profile = await dataService.getActiveStudent();
@@ -33,11 +33,7 @@ export default function LoginPage() {
       } catch { /* profile fetch failed — stays STUDENT */ }
       router.push(role === 'STUDENT' ? '/dashboard' : '/admin/analytics');
     } catch (err: any) {
-      if (err?.code === 'email_not_confirmed' || err?.message?.includes('Email not confirmed')) {
-        setError('Email not confirmed. Check your inbox or ask your coordinator to disable email confirmation for testing.');
-      } else {
-        setError(err?.message || 'Login failed. Please try again.');
-      }
+      setError(err?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -122,19 +118,20 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
+            {/* Name */}
             <div>
-              <label className="block text-sm font-label font-semibold text-neutral-700 mb-2">Email Address</label>
+              <label className="block text-sm font-label font-semibold text-neutral-700 mb-2">Full Name</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-neutral-400 text-[18px]">mail</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-neutral-400 text-[18px]">person</span>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="student@thalirverse.edu"
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Arjun Kumar"
                   className="w-full pl-10 pr-4 py-4 bg-neutral-50 border-none rounded-2xl ring-1 ring-neutral-200 focus:ring-2 focus:ring-orange-500 focus:bg-white text-sm focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all"
                 />
               </div>
+              <p className="text-xs text-neutral-400 mt-1.5">Enter the exact name you registered with.</p>
             </div>
 
             {/* Password */}
