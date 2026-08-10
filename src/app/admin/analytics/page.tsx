@@ -277,30 +277,18 @@ export default function SuperAdminAnalytics() {
             {
               label: 'Total Students', value: totalStudents, sub: 'Registered',
               iconBg: 'bg-blue-50', iconColor: 'text-blue-600', icon: 'groups',
-              trendClass: 'text-green-500 bg-green-50',
-              bars: ['h-4','h-6','h-8','h-10'],
-              barColor: 'bg-blue-600', barFade: ['bg-blue-100','bg-blue-100','bg-blue-200'],
             },
             {
               label: 'Graduates', value: graduates.length, sub: 'All modules done',
               iconBg: 'bg-orange-50', iconColor: 'text-orange-600', icon: 'bolt',
-              trendClass: 'text-green-500 bg-green-50',
-              bars: ['h-10','h-8','h-9','h-7'],
-              barColor: 'bg-orange-600', barFade: ['bg-orange-100','bg-orange-100','bg-orange-200'],
             },
             {
               label: 'Completion Rate', value: `${avgCompletion}%`, sub: 'Across all modules',
               iconBg: 'bg-purple-50', iconColor: 'text-purple-600', icon: 'verified',
-              trendClass: 'text-green-500 bg-green-50',
-              bars: ['h-5','h-4','h-6','h-5'],
-              barColor: 'bg-purple-600', barFade: ['bg-purple-100','bg-purple-100','bg-purple-200'],
             },
             {
               label: 'Active Learners', value: active.length, sub: 'In progress',
               iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', icon: 'trending_up',
-              trendClass: 'text-green-500 bg-green-50',
-              bars: ['h-4','h-7','h-9','h-10'],
-              barColor: 'bg-emerald-600', barFade: ['bg-emerald-100','bg-emerald-100','bg-emerald-200'],
             },
           ].map(card => (
             <div key={card.label}
@@ -309,17 +297,10 @@ export default function SuperAdminAnalytics() {
                 <div className={`w-12 h-12 ${card.iconBg} rounded-2xl flex items-center justify-center ${card.iconColor} group-hover:scale-110 transition-transform`}>
                   <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>{card.icon}</span>
                 </div>
-                <span className={`font-bold text-xs flex items-center gap-1 px-2 py-1 rounded-full ${card.trendClass}`}>
-                  <span className="material-symbols-outlined text-sm">trending_up</span>
-                </span>
               </div>
               <p className="text-gray-500 font-medium text-sm">{card.label}</p>
               <h4 className="text-2xl font-black text-slate-900 mt-1">{card.value}</h4>
-              <div className="h-10 mt-4 flex items-end gap-1">
-                {[...card.barFade, card.barColor].map((c, i) => (
-                  <div key={i} className={`flex-1 rounded-t-sm ${c} ${card.bars[i]}`} />
-                ))}
-              </div>
+              <p className="text-xs text-neutral-400 font-medium mt-4">{card.sub}</p>
             </div>
           ))}
         </section>
