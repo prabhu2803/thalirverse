@@ -237,15 +237,18 @@ export default function SuperAdminAnalytics() {
       <AdminSidebar role={adminRole} adminName={adminName} />
 
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-neutral-100 h-16 flex items-center justify-between px-8 shadow-sm">
-          <h2 className="text-base font-headline font-bold text-neutral-700">Organizer Analytics Dashboard</h2>
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-neutral-800 leading-tight">{adminName}</p>
-              <p className="text-[10px] text-neutral-400 font-medium">{adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Course Admin'}</p>
-            </div>
-            <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-black ring-2 ring-orange-100">
-              {adminName.trim().split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-neutral-100 h-20 flex items-center justify-between px-8 shadow-sm">
+          <h2 className="text-lg font-headline font-bold text-neutral-800">Organizer Analytics Dashboard</h2>
+          <div className="flex items-center gap-4">
+            <div className="h-8 w-px bg-neutral-200" />
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-bold text-neutral-800 leading-tight">{adminName}</p>
+                <p className="text-xs text-neutral-400 font-medium">{adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Course Admin'}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-sm font-black ring-2 ring-orange-100">
+                {adminName.trim().split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+              </div>
             </div>
           </div>
         </header>
