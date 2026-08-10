@@ -85,7 +85,7 @@ export const supabase = g._supabase;
 
 // Students log in with just their name + password, but Supabase Auth still requires
 // an email internally — generate a hidden, never-shown placeholder for it.
-function makePlaceholderEmail(fullName: string) {
+export function makePlaceholderEmail(fullName: string) {
   const slug = fullName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '') || 'student';
   const suffix = Math.random().toString(36).slice(2, 10);
   return `${slug}.${suffix}@students.thalirverse.internal`;

@@ -1,10 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { dataService } from '@/lib/supabaseClient';
+import { dataService, supabase } from '@/lib/supabaseClient';
+import { parseCsv, downloadCsv } from '@/lib/csv';
 import AdminSidebar from './AdminSidebar';
+
+const BULK_TEMPLATE_HEADERS = ['Full Name', 'School', 'Standard', 'Section', 'District', 'Gender'];
+const BULK_TEMPLATE_EXAMPLE = ['Arjun Kumar', 'Greenwood High School', '9th Standard', 'A', 'Madurai', 'male'];
+
+interface BulkRow {
+  fullName: string; school: string; standard: string; section: string; district: string; gender: string;
+  clientError?: string;
+}
+
+interface BulkResult {
+  fullName: string;
+  status: 'created' | 'skipped' | 'failed';
+  password?: string;
+  reason?: string;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -25,6 +41,14 @@ export default function AdminDashboard() {
   // Delete student modal
   const [deleteStudentTarget, setDeleteStudentTarget] = useState<any>(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
+
+  // Bulk import modal
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
+  const [bulkFileError, setBulkFileError] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function loadAdminData() {
@@ -116,6 +140,98 @@ export default function AdminDashboard() {
     document.body.removeChild(link);
   };
 
+  const openBulkImport = () => {
+    setBulkOpen(true);
+    setBulkRows([]);
+    setBulkFileError('');
+    setBulkResults(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDownloadTemplate = () => {
+    downloadCsv('thalirverse_student_import_template.csv', [BULK_TEMPLATE_HEADERS, BULK_TEMPLATE_EXAMPLE]);
+  };
+
+  const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFileError('');
+    setBulkResults(null);
+    try {
+      const text = await file.text();
+      const table = parseCsv(text);
+      if (table.length < 2) { setBulkFileError('File has no data rows.'); setBulkRows([]); return; }
+
+      const header = table[0].map(h => h.trim().toLowerCase());
+      const col = (name: string) => header.indexOf(name);
+      const idx = {
+        fullName: col('full name'), school: col('school'), standard: col('standard'),
+        section: col('section'), district: col('district'), gender: col('gender'),
+      };
+      if (idx.fullName === -1 || idx.school === -1 || idx.standard === -1) {
+        setBulkFileError('Missing required columns — expected at least "Full Name", "School", "Standard".');
+        setBulkRows([]);
+        return;
+      }
+
+      const seen = new Set<string>();
+      const rows: BulkRow[] = table.slice(1).map(r => {
+        const fullName = (r[idx.fullName] || '').trim();
+        const school = (r[idx.school] || '').trim();
+        const standard = (r[idx.standard] || '').trim();
+        const section = idx.section > -1 ? (r[idx.section] || '').trim() : '';
+        const district = idx.district > -1 ? (r[idx.district] || '').trim() : '';
+        const gender = idx.gender > -1 ? (r[idx.gender] || '').trim() : '';
+        let clientError: string | undefined;
+        if (!fullName) clientError = 'Missing name';
+        else if (!school) clientError = 'Missing school';
+        else if (!standard) clientError = 'Missing standard';
+        else {
+          const key = fullName.toLowerCase();
+          if (seen.has(key)) clientError = 'Duplicate name in file';
+          seen.add(key);
+        }
+        return { fullName, school, standard, section, district, gender, clientError };
+      });
+      setBulkRows(rows);
+    } catch (err: any) {
+      setBulkFileError(err?.message || 'Could not read file.');
+    }
+  };
+
+  const handleBulkSubmit = async () => {
+    const validRows = bulkRows.filter(r => !r.clientError);
+    if (validRows.length === 0) return;
+    setBulkSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Session expired — please log in again.');
+      const res = await fetch('/api/admin/bulk-import-students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ rows: validRows.map(({ clientError, ...r }) => r) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Import failed.');
+      setBulkResults(json.results);
+      const created = await dataService.getStudents();
+      setStudentsList(created);
+    } catch (err: any) {
+      setBulkFileError(err?.message || 'Import failed. Please try again.');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+  const handleDownloadResults = () => {
+    if (!bulkResults) return;
+    const rows = [
+      ['Full Name', 'Status', 'Password', 'Notes'],
+      ...bulkResults.map(r => [r.fullName, r.status, r.password || '', r.reason || '']),
+    ];
+    downloadCsv('thalirverse_bulk_import_results.csv', rows);
+  };
+
   if (loading || !adminProfile) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-white">
@@ -154,15 +270,24 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-black font-headline tracking-tight mt-2">Platform Analytics</h1>
             <p className="text-neutral-500 text-sm mt-1">Managing students, modules, and graduation metrics.</p>
           </div>
-          {totalStudents > 0 && (
+          <div className="flex gap-3">
             <button
-              onClick={handleExportCSV}
-              className="px-5 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl flex items-center gap-2 text-sm hover:-translate-y-0.5 active:translate-y-0 transition-all shadow-md"
+              onClick={openBulkImport}
+              className="px-5 py-3 bg-white border border-neutral-200 hover:border-orange-400 text-neutral-700 font-bold rounded-xl flex items-center gap-2 text-sm transition-all"
             >
-              <span className="material-symbols-outlined text-sm">download</span>
-              Export CSV
+              <span className="material-symbols-outlined text-sm">group_add</span>
+              Bulk Import
             </button>
-          )}
+            {totalStudents > 0 && (
+              <button
+                onClick={handleExportCSV}
+                className="px-5 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl flex items-center gap-2 text-sm hover:-translate-y-0.5 active:translate-y-0 transition-all shadow-md"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Export CSV
+              </button>
+            )}
+          </div>
         </section>
 
         {/* Stats */}
@@ -375,6 +500,152 @@ export default function AdminDashboard() {
                   {deletingStudent ? 'Removing...' : 'Remove'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk Import Modal ── */}
+      {bulkOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col animate-[fade-in_0.2s_ease-out]">
+            <div className="flex justify-between items-start p-6 border-b border-neutral-100 shrink-0">
+              <div>
+                <h3 className="font-headline font-black text-lg">Bulk Import Students</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">Upload a CSV to create many accounts at once.</p>
+              </div>
+              <button onClick={() => setBulkOpen(false)}
+                className="material-symbols-outlined text-neutral-400 hover:text-neutral-600 p-1 rounded-full transition-all">
+                close
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              {!bulkResults ? (
+                <>
+                  <div className="flex items-center justify-between bg-neutral-50 border border-neutral-100 rounded-2xl p-4">
+                    <div className="text-sm text-neutral-600">
+                      <p className="font-bold text-neutral-800">1. Download the template</p>
+                      <p className="text-xs text-neutral-400 mt-0.5">Fill it in, then upload it below.</p>
+                    </div>
+                    <button onClick={handleDownloadTemplate}
+                      className="px-4 py-2 bg-white border border-neutral-200 hover:border-orange-400 text-neutral-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0">
+                      <span className="material-symbols-outlined text-sm">download</span>
+                      Template
+                    </button>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-neutral-800 mb-2">2. Upload the completed CSV</p>
+                    <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleBulkFileChange}
+                      className="w-full text-sm text-neutral-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold file:text-sm hover:file:bg-orange-100 cursor-pointer" />
+                    {bulkFileError && (
+                      <div className="mt-2 p-3 text-xs text-red-600 bg-red-50 rounded-xl border border-red-100 font-bold">{bulkFileError}</div>
+                    )}
+                  </div>
+
+                  {bulkRows.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-bold text-neutral-800">3. Review ({bulkRows.length} rows)</p>
+                        <p className="text-xs text-neutral-400">
+                          {bulkRows.filter(r => !r.clientError).length} ready
+                          {bulkRows.some(r => r.clientError) && `, ${bulkRows.filter(r => r.clientError).length} with errors`}
+                        </p>
+                      </div>
+                      <div className="border border-neutral-100 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead className="sticky top-0 bg-neutral-50 border-b border-neutral-100">
+                            <tr className="text-neutral-400 font-bold uppercase tracking-wider">
+                              <th className="px-3 py-2">Name</th>
+                              <th className="px-3 py-2">School</th>
+                              <th className="px-3 py-2">Standard</th>
+                              <th className="px-3 py-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-50">
+                            {bulkRows.map((r, i) => (
+                              <tr key={i} className={r.clientError ? 'bg-red-50/50' : ''}>
+                                <td className="px-3 py-2 font-bold text-neutral-700">{r.fullName || '—'}</td>
+                                <td className="px-3 py-2 text-neutral-500">{r.school || '—'}</td>
+                                <td className="px-3 py-2 text-neutral-500">{r.standard || '—'}</td>
+                                <td className="px-3 py-2">
+                                  {r.clientError
+                                    ? <span className="text-red-500 font-bold">{r.clientError}</span>
+                                    : <span className="text-green-600 font-bold">Ready</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between bg-neutral-50 border border-neutral-100 rounded-2xl p-4">
+                    <div className="text-sm">
+                      <p className="font-bold text-neutral-800">
+                        {bulkResults.filter(r => r.status === 'created').length} created,{' '}
+                        {bulkResults.filter(r => r.status === 'skipped').length} skipped,{' '}
+                        {bulkResults.filter(r => r.status === 'failed').length} failed
+                      </p>
+                      <p className="text-xs text-neutral-400 mt-0.5">Download the credentials to hand out to students.</p>
+                    </div>
+                    <button onClick={handleDownloadResults}
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0">
+                      <span className="material-symbols-outlined text-sm">download</span>
+                      Credentials
+                    </button>
+                  </div>
+                  <div className="border border-neutral-100 rounded-2xl overflow-hidden max-h-72 overflow-y-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="sticky top-0 bg-neutral-50 border-b border-neutral-100">
+                        <tr className="text-neutral-400 font-bold uppercase tracking-wider">
+                          <th className="px-3 py-2">Name</th>
+                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Password / Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-50">
+                        {bulkResults.map((r, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2 font-bold text-neutral-700">{r.fullName}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                r.status === 'created' ? 'bg-green-100 text-green-700' :
+                                r.status === 'skipped' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                              }`}>{r.status}</span>
+                            </td>
+                            <td className="px-3 py-2 text-neutral-500 font-mono">{r.password || r.reason || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-neutral-100 shrink-0 flex gap-3">
+              {!bulkResults ? (
+                <>
+                  <button onClick={() => setBulkOpen(false)}
+                    className="w-1/3 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-sm transition-all">
+                    Cancel
+                  </button>
+                  <button onClick={handleBulkSubmit} disabled={bulkSubmitting || bulkRows.filter(r => !r.clientError).length === 0}
+                    className="w-2/3 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm shadow-md disabled:opacity-50 transition-all">
+                    {bulkSubmitting ? 'Creating accounts...' : `Import ${bulkRows.filter(r => !r.clientError).length} Students`}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setBulkOpen(false)}
+                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm shadow-md transition-all">
+                  Done
+                </button>
+              )}
             </div>
           </div>
         </div>
