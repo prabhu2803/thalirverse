@@ -41,11 +41,6 @@ export default function LoginPage() {
 
   return (
     <main className="relative min-h-screen flex flex-col lg:flex-row font-body">
-      {/* Floating Back Button */}
-      <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 text-neutral-500 hover:text-orange-500 transition-colors font-bold text-sm z-50">
-        <span className="material-symbols-outlined">arrow_back</span>
-        Back to Home
-      </Link>
 
       {/* ── Left Panel ─────────────────────────────────────────────── */}
       <div className="relative hidden lg:flex lg:w-1/2 bg-orange-50 flex-col justify-between p-12 overflow-hidden min-h-screen">
@@ -55,12 +50,12 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-10">
+          <Link href="/" className="flex items-center gap-2 mb-10 w-fit">
             <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center shadow-md shadow-orange-500/30">
               <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>school</span>
             </div>
             <span className="text-lg font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
-          </div>
+          </Link>
 
           {/* Illustration thumbnail */}
           <div className="rounded-2xl overflow-hidden shadow-lg mb-10 max-w-xs mx-auto">
