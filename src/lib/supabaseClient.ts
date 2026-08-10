@@ -92,8 +92,38 @@ export function makePlaceholderEmail(fullName: string) {
 }
 
 export const dataService = {
+  // Looks up an existing school by case-insensitive name match, or creates
+  // one on the fly. Lets registration keep a simple free-text field while
+  // still building a real, de-duplicated school directory behind it.
+  async findOrCreateSchoolId(name: string, district: string): Promise<string | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+
+    const { data: existing } = await supabase.from('schools').select('id').ilike('name', trimmed).limit(1).maybeSingle();
+    if (existing) return existing.id;
+
+    const { data: chapters } = await supabase.from('chapters').select('id, name');
+    const matchedChapter = chapters?.find(c => c.name.toLowerCase() === district.trim().toLowerCase());
+
+    const { data: created, error } = await supabase.from('schools').insert({
+      name: trimmed,
+      city: district.trim() || 'Unknown',
+      district: district.trim() || 'Unknown',
+      chapter_id: matchedChapter?.id ?? null,
+    }).select('id').single();
+
+    if (error) {
+      // Unique-constraint race: someone else created the same school between our lookup and insert.
+      const { data: retry } = await supabase.from('schools').select('id').ilike('name', trimmed).limit(1).maybeSingle();
+      if (retry) return retry.id;
+      throw error;
+    }
+    return created.id;
+  },
+
   async signUp(fullName: string, school: string, standard: string, sec: string, district: string, password: string) {
     const region = getRegionFromDistrict(district);
+    const schoolId = await this.findOrCreateSchoolId(school, district);
     const email = makePlaceholderEmail(fullName);
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -102,7 +132,7 @@ export const dataService = {
     });
     if (error) throw error;
 
-    const profilePayload = { id: '', full_name: fullName, role: 'STUDENT', school, standard, district, region };
+    const profilePayload = { id: '', full_name: fullName, role: 'STUDENT', school, school_id: schoolId, standard, district, region };
 
     if (!data.session) {
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -324,11 +354,59 @@ export const dataService = {
   async getStudents() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, school, standard, district, region, created_at')
+      .select('id, full_name, school, school_id, standard, district, region, created_at')
       .eq('role', 'STUDENT')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data ?? [];
+  },
+
+  // ── School directory (organizations = brands, schools = campuses) ──
+  async getSchoolsDirectory() {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('id, name, city, district, chapter_id, organization_id, coordinator_name, coordinator_mobile, organizations(id, name)')
+      .order('name');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async getOrganizations() {
+    const { data, error } = await supabase.from('organizations').select('*').order('name');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async createOrganization(name: string) {
+    const { data, error } = await supabase.from('organizations').insert({ name: name.trim() }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateOrganization(id: string, name: string) {
+    const { error } = await supabase.from('organizations').update({ name: name.trim() }).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteOrganization(id: string) {
+    const { error } = await supabase.from('organizations').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  async createSchool(fields: { name: string; city: string; district: string; chapter_id?: string | null; organization_id?: string | null; coordinator_name?: string; coordinator_mobile?: string }) {
+    const { data, error } = await supabase.from('schools').insert(fields).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateSchool(id: string, updates: Record<string, any>) {
+    const { error } = await supabase.from('schools').update(updates).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteSchool(id: string) {
+    const { error } = await supabase.from('schools').delete().eq('id', id);
+    if (error) throw error;
   },
 
   async getAllProgress() {

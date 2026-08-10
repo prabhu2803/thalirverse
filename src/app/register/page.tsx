@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
@@ -24,6 +24,13 @@ export default function Register() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [schoolOptions, setSchoolOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    dataService.getSchoolsDirectory()
+      .then(schools => setSchoolOptions(schools.map((s: any) => s.name)))
+      .catch(() => { /* directory is a nice-to-have; registration still works without it */ });
+  }, []);
 
   const handleNext = (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -195,14 +202,19 @@ export default function Register() {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="flex flex-col">
                 <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">School Name *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
+                  list="school-options"
                   value={school}
                   onChange={(e) => setSchool(e.target.value)}
                   placeholder="Greenwood High School"
-                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white" 
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white"
                 />
+                <datalist id="school-options">
+                  {schoolOptions.map(name => <option key={name} value={name} />)}
+                </datalist>
+                <p className="text-xs text-neutral-400 mt-1.5">Start typing to find your school, or enter a new one.</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

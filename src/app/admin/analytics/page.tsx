@@ -18,6 +18,7 @@ export default function SuperAdminAnalytics() {
   const [modules, setModules] = useState<any[]>([]);
   const [allProgress, setAllProgress] = useState<any[]>([]);
   const [allQuizAttempts, setAllQuizAttempts] = useState<any[]>([]);
+  const [schoolsDirectory, setSchoolsDirectory] = useState<any[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -29,16 +30,18 @@ export default function SuperAdminAnalytics() {
       }
       setAdminRole(admin.role);
       setAdminName(admin.fullName || 'Admin');
-      const [s, m, p, q] = await Promise.all([
+      const [s, m, p, q, dir] = await Promise.all([
         dataService.getStudents(),
         dataService.getModules(),
         dataService.getAllProgress(),
         dataService.getAllQuizAttempts(),
+        dataService.getSchoolsDirectory(),
       ]);
       setStudents(s);
       setModules(m);
       setAllProgress(p);
       setAllQuizAttempts(q);
+      setSchoolsDirectory(dir);
       setLoading(false);
     }
     load();
@@ -183,6 +186,27 @@ export default function SuperAdminAnalytics() {
     .map(([name, v]) => ({ name, ...v, rate: Math.round((v.graduates / v.students) * 100) }))
     .sort((a, b) => b.students - a.students)
     .slice(0, 10);
+
+  // ── Organization breakdown (brands with multiple campuses) ─────
+  const schoolById: Record<string, any> = {};
+  schoolsDirectory.forEach(s => { schoolById[s.id] = s; });
+
+  const orgMap: Record<string, { campuses: Set<string>; students: number; graduates: number }> = {};
+  students.forEach(s => {
+    const school = s.school_id ? schoolById[s.school_id] : null;
+    const org = school?.organizations;
+    if (!org) return; // standalone schools already covered by School Breakdown
+    if (!orgMap[org.name]) orgMap[org.name] = { campuses: new Set(), students: 0, graduates: 0 };
+    orgMap[org.name].campuses.add(school.id);
+    orgMap[org.name].students++;
+    if (isGraduate(s.id)) orgMap[org.name].graduates++;
+  });
+  const organizationStats = Object.entries(orgMap)
+    .map(([name, v]) => ({
+      name, campuses: v.campuses.size, students: v.students, graduates: v.graduates,
+      rate: v.students > 0 ? Math.round((v.graduates / v.students) * 100) : 0,
+    }))
+    .sort((a, b) => b.students - a.students);
 
   // ── District breakdown ────────────────────────────────────────
   const districtMap: Record<string, { region: string; students: number; graduates: number }> = {};
@@ -496,6 +520,47 @@ export default function SuperAdminAnalytics() {
             )}
           </div>
         </section>
+
+        {/* ── Organization stats ── */}
+        {organizationStats.length > 0 && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-headline font-black">Organization Breakdown</h2>
+              <p className="text-sm text-neutral-500">Brands with multiple campuses, rolled up across all their schools.</p>
+            </div>
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="bg-neutral-50 text-neutral-400 font-bold font-label uppercase text-[10px] tracking-wider border-b border-neutral-100">
+                    <th className="px-6 py-3">Organization</th>
+                    <th className="px-6 py-3 text-center">Campuses</th>
+                    <th className="px-6 py-3 text-center">Students</th>
+                    <th className="px-6 py-3 text-center">Graduates</th>
+                    <th className="px-6 py-3 text-center">Completion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {organizationStats.map(o => (
+                    <tr key={o.name} className="hover:bg-neutral-50/50 transition-colors">
+                      <td className="px-6 py-3 font-bold">{o.name}</td>
+                      <td className="px-6 py-3 text-center">{o.campuses}</td>
+                      <td className="px-6 py-3 text-center">{o.students}</td>
+                      <td className="px-6 py-3 text-center text-green-600 font-bold">{o.graduates}</td>
+                      <td className="px-6 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-orange-500 rounded-full" style={{ width: `${o.rate}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-neutral-600">{o.rate}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* ── School stats ── */}
         <section className="space-y-4 pb-4">

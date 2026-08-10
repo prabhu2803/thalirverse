@@ -14,19 +14,29 @@ CREATE TABLE IF NOT EXISTS public.chapters (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Schools
+-- 2. Organizations (a brand/tenant that owns multiple school campuses,
+--    e.g. "Greenwood High School" with a Madurai campus and a Chennai
+--    campus). Optional — most schools are standalone and have none.
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Schools (one row per physical campus)
 CREATE TABLE IF NOT EXISTS public.schools (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL UNIQUE,
   city VARCHAR(100) NOT NULL,
   district VARCHAR(100) NOT NULL,
   chapter_id UUID REFERENCES public.chapters(id) ON DELETE SET NULL,
+  organization_id UUID REFERENCES public.organizations(id) ON DELETE SET NULL,
   coordinator_name VARCHAR(100),
   coordinator_mobile VARCHAR(20),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Profiles (Extends Supabase auth.users)
+-- 4. Profiles (Extends Supabase auth.users)
 CREATE TYPE public.user_role AS ENUM ('STUDENT', 'YI_ADMIN', 'SUPER_ADMIN');
 
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -35,6 +45,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   mobile VARCHAR(20) UNIQUE,
   role public.user_role DEFAULT 'STUDENT',
   xp INTEGER NOT NULL DEFAULT 0,
+  school VARCHAR(255),           -- free-text school name as typed at registration
+  school_id UUID REFERENCES public.schools(id) ON DELETE SET NULL, -- resolved school record
+  standard VARCHAR(50),
+  district VARCHAR(100),
+  region VARCHAR(50),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
