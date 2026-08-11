@@ -23,6 +23,8 @@ export default function SuperAdminAnalytics() {
   const [admins, setAdmins] = useState<any[]>([]);
   const [contentStats, setContentStats] = useState<{ totalQuestions: number; totalQuizzes: number; publishedQuizzes: number } | null>(null);
   const [loadError, setLoadError] = useState('');
+  // Yi Admin sees only their assigned schools; null = unscoped (Super Admin)
+  const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -35,12 +37,17 @@ export default function SuperAdminAnalytics() {
         }
         setAdminRole(admin.role);
         setAdminName(admin.fullName || 'Admin');
-        const [s, m, p, q] = await Promise.all([
+        let [s, m, p, q] = await Promise.all([
           dataService.getStudents(),
           dataService.getModules(),
           dataService.getAllProgress(),
           dataService.getAllQuizAttempts(),
         ]);
+        if (admin.role === 'YI_ADMIN') {
+          const schoolIds = await dataService.getAdminSchoolIds(admin.id);
+          setScopedSchoolIds(schoolIds);
+          s = s.filter((st: any) => st.school_id && schoolIds.includes(st.school_id));
+        }
         setStudents(s);
         setModules(m);
         setAllProgress(p);
@@ -315,6 +322,11 @@ export default function SuperAdminAnalytics() {
           <div>
             <p className="text-orange-600 font-bold text-sm mb-1">OVERVIEW</p>
             <h3 className="text-3xl font-black text-neutral-900 tracking-tight">Performance Analytics</h3>
+            {scopedSchoolIds && (
+              <p className="text-sm text-neutral-500 mt-1">
+                Scoped to your {scopedSchoolIds.length} assigned school{scopedSchoolIds.length !== 1 ? 's' : ''}.
+              </p>
+            )}
           </div>
           <div className="flex gap-3">
             <span className="flex items-center gap-2 bg-white border border-neutral-200 text-neutral-500 px-4 py-2 rounded-xl font-bold text-sm">
@@ -332,6 +344,12 @@ export default function SuperAdminAnalytics() {
         {loadError && (
           <div className="p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100 font-bold">
             {loadError}
+          </div>
+        )}
+
+        {scopedSchoolIds?.length === 0 && (
+          <div className="p-4 text-sm text-orange-700 bg-orange-50 rounded-2xl border border-orange-100 font-bold">
+            You haven&apos;t been assigned to any schools yet — ask your Super Admin to assign you some from the Team page.
           </div>
         )}
 

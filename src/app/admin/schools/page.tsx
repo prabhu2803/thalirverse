@@ -10,12 +10,15 @@ export default function AdminSchools() {
   const [loading, setLoading] = useState(true);
   const [adminRole, setAdminRole] = useState('');
   const [adminName, setAdminName] = useState('');
+  const [adminId, setAdminId] = useState('');
 
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [schools, setSchools] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
+  // Yi Admin sees only their assigned schools/orgs; null = unscoped (Super Admin)
+  const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
 
   // Organization modal
   const [orgModal, setOrgModal] = useState<{ id?: string; name: string } | null>(null);
@@ -36,7 +39,13 @@ export default function AdminSchools() {
         if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
         setAdminRole(admin.role);
         setAdminName(admin.fullName || 'Admin');
-        await refresh();
+        setAdminId(admin.id);
+        let ids: string[] | null = null;
+        if (admin.role === 'YI_ADMIN') {
+          ids = await dataService.getAdminSchoolIds(admin.id);
+          setScopedSchoolIds(ids);
+        }
+        await refresh(ids);
       } catch (e: any) {
         setLoadError(e?.message || 'Failed to load schools. Has sql/school_organizations.sql been run yet?');
       } finally {
@@ -46,15 +55,23 @@ export default function AdminSchools() {
     load();
   }, []);
 
-  async function refresh() {
+  async function refresh(scopedIdsOverride?: string[] | null) {
     try {
+      const ids = scopedIdsOverride !== undefined ? scopedIdsOverride : scopedSchoolIds;
       const [orgs, dir, students] = await Promise.all([
         dataService.getOrganizations(),
         dataService.getSchoolsDirectory(),
         dataService.getStudents(),
       ]);
-      setOrganizations(orgs);
-      setSchools(dir);
+      let visibleSchools = dir;
+      let visibleOrgs = orgs;
+      if (ids) {
+        visibleSchools = dir.filter((s: any) => ids.includes(s.id));
+        const orgIds = new Set(visibleSchools.map((s: any) => s.organization_id).filter(Boolean));
+        visibleOrgs = orgs.filter((o: any) => orgIds.has(o.id));
+      }
+      setOrganizations(visibleOrgs);
+      setSchools(visibleSchools);
       const counts: Record<string, number> = {};
       students.forEach((s: any) => { if (s.school_id) counts[s.school_id] = (counts[s.school_id] ?? 0) + 1; });
       setStudentCounts(counts);
@@ -120,10 +137,21 @@ export default function AdminSchools() {
         coordinator_name: schoolModal.coordinator_name || null,
         coordinator_mobile: schoolModal.coordinator_mobile || null,
       };
-      if (schoolModal.id) await dataService.updateSchool(schoolModal.id, fields);
-      else await dataService.createSchool(fields);
+      let nextScopedIds = scopedSchoolIds;
+      if (schoolModal.id) {
+        await dataService.updateSchool(schoolModal.id, fields);
+      } else {
+        const created = await dataService.createSchool(fields);
+        // Otherwise a Yi Admin's own new school would immediately vanish
+        // from their own scoped view.
+        if (adminRole === 'YI_ADMIN') {
+          await dataService.assignAdminToSchool(adminId, created.id);
+          nextScopedIds = scopedSchoolIds ? [...scopedSchoolIds, created.id] : [created.id];
+          setScopedSchoolIds(nextScopedIds);
+        }
+      }
       setSchoolModal(null);
-      await refresh();
+      await refresh(nextScopedIds);
     } catch (e: any) {
       setFormError(e?.message || 'Failed to save — the school name may already exist.');
     } finally {
@@ -161,13 +189,21 @@ export default function AdminSchools() {
           <section>
             <h1 className="text-3xl font-black font-headline tracking-tight">Schools & Organizations</h1>
             <p className="text-neutral-500 text-sm mt-1">
-              Group multiple campuses of the same brand under one organization, or manage standalone schools.
+              {scopedSchoolIds
+                ? `Showing your ${scopedSchoolIds.length} assigned school${scopedSchoolIds.length !== 1 ? 's' : ''}. New schools you add here are assigned to you automatically.`
+                : 'Group multiple campuses of the same brand under one organization, or manage standalone schools.'}
             </p>
           </section>
 
           {loadError && (
             <div className="p-4 text-sm text-red-600 bg-red-50 rounded-2xl border border-red-100 font-bold">
               {loadError}
+            </div>
+          )}
+
+          {scopedSchoolIds?.length === 0 && (
+            <div className="p-4 text-sm text-orange-700 bg-orange-50 rounded-2xl border border-orange-100 font-bold">
+              You haven&apos;t been assigned to any schools yet — ask your Super Admin to assign you some from the Team page, or add a new school below.
             </div>
           )}
 

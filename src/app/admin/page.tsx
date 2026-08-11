@@ -50,6 +50,9 @@ export default function AdminDashboard() {
   const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Yi Admin sees only their assigned schools; null = unscoped (Super Admin)
+  const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
+
   useEffect(() => {
     async function loadAdminData() {
       try {
@@ -57,10 +60,17 @@ export default function AdminDashboard() {
         if (!activeAdmin) { router.push('/login'); return; }
         setAdminProfile(activeAdmin);
 
-        const [students, modules] = await Promise.all([
+        let [students, modules] = await Promise.all([
           dataService.getStudents(),
           dataService.getModules(),
         ]);
+
+        if (activeAdmin.role === 'YI_ADMIN') {
+          const schoolIds = await dataService.getAdminSchoolIds(activeAdmin.id);
+          setScopedSchoolIds(schoolIds);
+          students = students.filter((s: any) => s.school_id && schoolIds.includes(s.school_id));
+        }
+
         setStudentsList(students);
         setAllModules(modules);
 
@@ -268,7 +278,11 @@ export default function AdminDashboard() {
               {isSuperAdmin ? 'Super Admin' : 'Yi Admin'}
             </span>
             <h1 className="text-3xl font-black font-headline tracking-tight mt-2">Platform Analytics</h1>
-            <p className="text-neutral-500 text-sm mt-1">Managing students, modules, and graduation metrics.</p>
+            <p className="text-neutral-500 text-sm mt-1">
+              {scopedSchoolIds
+                ? `Showing students from your ${scopedSchoolIds.length} assigned school${scopedSchoolIds.length !== 1 ? 's' : ''}.`
+                : 'Managing students, modules, and graduation metrics.'}
+            </p>
           </div>
           <div className="flex gap-3">
             <button
@@ -289,6 +303,12 @@ export default function AdminDashboard() {
             )}
           </div>
         </section>
+
+        {scopedSchoolIds?.length === 0 && (
+          <div className="p-4 text-sm text-orange-700 bg-orange-50 rounded-2xl border border-orange-100 font-bold">
+            You haven&apos;t been assigned to any schools yet — ask your Super Admin to assign you some from the Team page.
+          </div>
+        )}
 
         {/* Stats */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">

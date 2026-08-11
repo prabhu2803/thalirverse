@@ -404,6 +404,26 @@ export const dataService = {
     return map;
   },
 
+  // Just this one admin's assigned school ids — used to scope a Yi
+  // Admin's own view down to their schools/organizations.
+  async getAdminSchoolIds(adminId: string): Promise<string[]> {
+    const { data, error } = await supabase.from('admin_schools').select('school_id').eq('admin_id', adminId);
+    if (error) throw error;
+    return (data ?? []).map(r => r.school_id);
+  },
+
+  // Additive — adds one school to an admin's assignments without
+  // touching their existing ones (unlike setAdminSchools, which replaces
+  // the whole set). Used when a Yi Admin creates a new school, so it
+  // doesn't immediately vanish from their own scoped view.
+  async assignAdminToSchool(adminId: string, schoolId: string) {
+    const { error } = await supabase.from('admin_schools').upsert(
+      { admin_id: adminId, school_id: schoolId },
+      { onConflict: 'admin_id,school_id' }
+    );
+    if (error) throw error;
+  },
+
   async setAdminSchools(adminId: string, schoolIds: string[]) {
     const { error: delError } = await supabase.from('admin_schools').delete().eq('admin_id', adminId);
     if (delError) throw delError;
