@@ -331,13 +331,13 @@ export const dataService = {
 
   async saveQuiz(
     moduleId: string, title: string, passPercentage: number, questions: any[],
-    options?: { timeLimitSeconds?: number; shuffleQuestions?: boolean }
+    options?: { timeLimitSeconds?: number; shuffleQuestions?: boolean; isPublished?: boolean }
   ) {
     const quizId = `quiz-${moduleId}`;
 
     const { error: qzErr } = await supabase.from('quizzes').upsert({
       id: quizId, module_id: moduleId, title,
-      pass_percentage: passPercentage, retry_limit: 3, is_published: true,
+      pass_percentage: passPercentage, retry_limit: 3, is_published: options?.isPublished ?? true,
       time_limit_seconds: options?.timeLimitSeconds ?? 300,
       shuffle_questions: options?.shuffleQuestions ?? false,
     }, { onConflict: 'id' });
@@ -362,6 +362,25 @@ export const dataService = {
         if (aErr) throw aErr;
       }
     }
+  },
+
+  // Every module paired with its quiz (or null), for a standalone quiz
+  // management view instead of only editing a quiz inside its module.
+  async getQuizzesOverview() {
+    const [{ data: modules, error: mErr }, { data: quizzes, error: qErr }] = await Promise.all([
+      supabase.from('modules').select('id, title, category, order_index').order('order_index'),
+      supabase.from('quizzes').select('id, module_id, title, pass_percentage, time_limit_seconds, shuffle_questions, is_published, questions(id)'),
+    ]);
+    if (mErr) throw mErr;
+    if (qErr) throw qErr;
+    const quizByModule: Record<string, any> = {};
+    (quizzes ?? []).forEach(q => { quizByModule[q.module_id] = q; });
+    return (modules ?? []).map(m => ({ ...m, quiz: quizByModule[m.id] ?? null }));
+  },
+
+  async deleteQuiz(quizId: string) {
+    const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
+    if (error) throw error;
   },
 
   async getStudents() {
