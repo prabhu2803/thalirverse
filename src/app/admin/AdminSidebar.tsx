@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { springSnappy } from '@/lib/motion';
 
-const YI_ADMIN_NAV = [
+const TEACHER_ADMIN_NAV = [
   { label: 'Analytics',  href: '/admin/analytics', icon: 'insights' },
   { label: 'Students',   href: '/admin',           icon: 'group' },
   { label: 'Schools',    href: '/admin/schools',   icon: 'apartment' },
@@ -28,7 +30,7 @@ export default function AdminSidebar({ role, adminName }: Props) {
   const pathname = usePathname();
   const router   = useRouter();
 
-  const links  = role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : YI_ADMIN_NAV;
+  const links  = role === 'SUPER_ADMIN' ? SUPER_ADMIN_NAV : TEACHER_ADMIN_NAV;
   const initials = adminName.trim().split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
@@ -40,7 +42,7 @@ export default function AdminSidebar({ role, adminName }: Props) {
           <span className="text-2xl font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
         </div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-8 ml-9">
-          {role === 'SUPER_ADMIN' ? 'Super Admin' : 'Organiser'}
+          {role === 'SUPER_ADMIN' ? 'Super Admin' : 'Teacher Admin'}
         </p>
 
         <nav className="space-y-1">
@@ -50,15 +52,18 @@ export default function AdminSidebar({ role, adminName }: Props) {
               : pathname.startsWith(link.href);
             return (
               <Link key={link.label} href={link.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold transition-all ${
-                  isActive
-                    ? 'bg-orange-50 text-orange-600 font-bold'
-                    : 'text-neutral-500 hover:bg-orange-50 hover:text-orange-500'
+                className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold ${
+                  isActive ? 'text-orange-600 font-bold' : 'text-neutral-500 hover:bg-orange-50 hover:text-orange-500'
                 }`}>
-                <span className="material-symbols-outlined"
+                {isActive && (
+                  <motion.span layoutId="active-admin-link" transition={springSnappy}
+                    className="absolute inset-0 bg-orange-50 rounded-xl -z-10" />
+                )}
+                <motion.span whileHover={{ scale: 1.1 }} transition={springSnappy}
+                  className="material-symbols-outlined"
                   style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
                   {link.icon}
-                </span>
+                </motion.span>
                 {link.label}
               </Link>
             );
@@ -75,7 +80,7 @@ export default function AdminSidebar({ role, adminName }: Props) {
           <div className="overflow-hidden">
             <p className="text-sm font-bold truncate">{adminName}</p>
             <p className="text-[10px] text-neutral-400 font-label">
-              {role === 'SUPER_ADMIN' ? 'Super Admin' : 'YI Admin'}
+              {role === 'SUPER_ADMIN' ? 'Super Admin' : 'Teacher Admin'}
             </p>
           </div>
         </div>

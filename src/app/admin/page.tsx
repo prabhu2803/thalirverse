@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService, supabase } from '@/lib/supabaseClient';
 import { parseCsv, downloadCsv } from '@/lib/csv';
+import { scaleIn } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from './AdminSidebar';
 
 const BULK_TEMPLATE_HEADERS = ['Full Name', 'School', 'Standard', 'Section', 'District', 'Gender'];
@@ -50,7 +53,7 @@ export default function AdminDashboard() {
   const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Yi Admin sees only their assigned schools; null = unscoped (Super Admin)
+  // Teacher Admin sees only their assigned schools; null = unscoped (Super Admin)
   const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function AdminDashboard() {
           dataService.getModules(),
         ]);
 
-        if (activeAdmin.role === 'YI_ADMIN') {
+        if (activeAdmin.role === 'TEACHER_ADMIN') {
           const schoolIds = await dataService.getAdminSchoolIds(activeAdmin.id);
           setScopedSchoolIds(schoolIds);
           students = students.filter((s: any) => s.school_id && schoolIds.includes(s.school_id));
@@ -243,14 +246,7 @@ export default function AdminDashboard() {
   };
 
   if (loading || !adminProfile) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Admin Console...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="rows" count={6} />;
   }
 
   const isSuperAdmin = adminProfile.role === 'SUPER_ADMIN';
@@ -268,14 +264,14 @@ export default function AdminDashboard() {
           <h2 className="text-base font-headline font-bold text-neutral-700">Student Roster</h2>
         </header>
 
-      <main className="px-8 pt-8 pb-10 space-y-8 max-w-7xl">
+      <main className="px-8 pt-8 pb-10 space-y-8 w-full">
         {/* Page Title */}
         <section className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded tracking-wider ${
               isSuperAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
             }`}>
-              {isSuperAdmin ? 'Super Admin' : 'Yi Admin'}
+              {isSuperAdmin ? 'Super Admin' : 'Teacher Admin'}
             </span>
             <h1 className="text-3xl font-black font-headline tracking-tight mt-2">Platform Analytics</h1>
             <p className="text-neutral-500 text-sm mt-1">
@@ -434,9 +430,12 @@ export default function AdminDashboard() {
       </main>
 
       {/* ── View Progress Modal ── */}
+      <AnimatePresence>
       {progressStudent && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col animate-[fade-in_0.2s_ease-out]">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
             <div className="flex justify-between items-start p-6 border-b border-neutral-100 shrink-0">
               <div>
                 <h3 className="font-headline font-black text-lg">{progressStudent.full_name}</h3>
@@ -492,14 +491,18 @@ export default function AdminDashboard() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Delete Student Modal ── */}
+      <AnimatePresence>
       {deleteStudentTarget && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 animate-[fade-in_0.2s_ease-out]">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                 <span className="material-symbols-outlined text-3xl text-red-500">person_off</span>
@@ -521,14 +524,18 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Bulk Import Modal ── */}
+      <AnimatePresence>
       {bulkOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col animate-[fade-in_0.2s_ease-out]">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col">
             <div className="flex justify-between items-start p-6 border-b border-neutral-100 shrink-0">
               <div>
                 <h3 className="font-headline font-black text-lg">Bulk Import Students</h3>
@@ -667,13 +674,10 @@ export default function AdminDashboard() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
-
-      <style jsx global>{`
-        @keyframes fade-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-      `}</style>
+      </AnimatePresence>
       </div>
     </div>
   );

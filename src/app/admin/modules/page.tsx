@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService, supabase } from '@/lib/supabaseClient';
+import { scaleIn, slideUp } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from '../AdminSidebar';
 
 const ALPHA = ['A', 'B', 'C', 'D'];
@@ -64,7 +67,7 @@ export default function AdminModules() {
 
   useEffect(() => {
     dataService.getActiveStudent().then(a => {
-      if (!a || !['SUPER_ADMIN', 'YI_ADMIN'].includes(a.role)) { router.push('/login'); return; }
+      if (!a || !['SUPER_ADMIN', 'TEACHER_ADMIN'].includes(a.role)) { router.push('/login'); return; }
       setAdminRole(a.role);
       setAdminName(a.fullName || 'Admin');
     });
@@ -195,14 +198,7 @@ export default function AdminModules() {
     }
   };
 
-  if (loading) return (
-    <div className="flex justify-center items-center min-h-screen bg-white">
-      <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-        <span className="animate-spin text-4xl">⏳</span>
-        <span>Loading modules...</span>
-      </div>
-    </div>
-  );
+  if (loading) return <PageSkeleton shape="rows" count={5} />;
 
   return (
     <div className="flex overflow-hidden h-screen bg-neutral-50 font-body text-neutral-900">
@@ -213,7 +209,7 @@ export default function AdminModules() {
           <h2 className="text-base font-headline font-bold text-neutral-700">Course Builder</h2>
         </header>
 
-      <main className="px-8 pt-8 pb-10 space-y-8 max-w-5xl">
+      <main className="px-8 pt-8 pb-10 space-y-8 w-full">
         {/* Page title + Create button */}
         <section className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -306,9 +302,12 @@ export default function AdminModules() {
       </main>
 
       {/* ════════════ MULTI-STEP CREATE OVERLAY ════════════ */}
+      <AnimatePresence>
       {step > 0 && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] animate-[slide-up_0.25s_ease-out]">
+        <motion.div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={slideUp} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh]">
 
             {/* Top bar: step indicator + close */}
             <div className="px-8 pt-7 pb-4 border-b border-neutral-100 shrink-0">
@@ -552,14 +551,18 @@ export default function AdminModules() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Delete confirm modal */}
+      <AnimatePresence>
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 animate-[fade-in_0.2s_ease-out]">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                 <span className="material-symbols-outlined text-3xl text-red-500">delete_forever</span>
@@ -581,14 +584,10 @@ export default function AdminModules() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
-
-      <style jsx global>{`
-        @keyframes slide-up  { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fade-in   { from { opacity: 0; transform: scale(0.95);      } to { opacity: 1; transform: scale(1);      } }
-      `}</style>
+      </AnimatePresence>
       </div>
     </div>
   );

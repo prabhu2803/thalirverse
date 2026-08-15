@@ -2,15 +2,18 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
+import { StaggerGrid, StaggerItem } from '@/components/motion/StaggerGrid';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
-const SIDEBAR_ICONS = [
-  { icon: 'grid_view',      href: '/dashboard' },
-  { icon: 'school',         href: '/dashboard' },
-  { icon: 'quiz',           href: '#quiz' },
-  { icon: 'library_books',  href: '#' },
-  { icon: 'help',           href: '#' },
+// Same sidebar as the dashboard/profile/explore/notifications pages — same
+// links, same expanded (labelled) layout — so it doesn't visibly change
+// shape when a student opens a course.
+const NAV_LINKS = [
+  { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',   icon: 'search' },
+  { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
 ];
 
 const TABS = ['Overview', 'Notes', 'Discussions', 'Reviews'];
@@ -18,6 +21,7 @@ const TABS = ['Overview', 'Notes', 'Discussions', 'Reviews'];
 export default function CourseView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
   const router = useRouter();
+  const pathname = usePathname();
 
   const [student,        setStudent]      = useState<any>(null);
   const [course,         setCourse]       = useState<any>(null);
@@ -112,14 +116,7 @@ export default function CourseView({ params }: { params: Promise<{ id: string }>
   };
 
   if (loading || !course) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Curriculum...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="rows" count={4} />;
   }
 
   const completedIds    = new Set(progress.filter(p => p.status === 'COMPLETED').map(p => p.lesson_id));
@@ -131,26 +128,38 @@ export default function CourseView({ params }: { params: Promise<{ id: string }>
   return (
     <div className="flex min-h-screen bg-white font-body text-neutral-900">
 
-      {/* ── Narrow icon sidebar ─────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col items-center w-20 bg-white border-r border-neutral-100 py-6 gap-6 fixed left-0 top-0 h-full z-40">
-        <Link href="/" className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center mb-2">
-          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>school</span>
+      {/* ── Sidebar (matches dashboard/profile/explore/notifications) ── */}
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-neutral-100 py-6 px-4 gap-1 fixed left-0 top-0 h-full z-40">
+        <Link href="/dashboard" className="flex items-center gap-2 px-2 mb-8">
+          <span className="material-symbols-outlined text-orange-500" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>school</span>
+          <span className="text-xl font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
         </Link>
-        {SIDEBAR_ICONS.map(({ icon, href }) => (
-          <Link key={icon} href={href}
-            className="p-3 rounded-xl flex items-center justify-center text-neutral-500 hover:bg-orange-50 hover:text-orange-500 transition-all active:scale-95">
-            <span className="material-symbols-outlined">{icon}</span>
-          </Link>
-        ))}
+        {NAV_LINKS.map(({ label, href, icon }) => {
+          const isActive = pathname === href;
+          return (
+            <Link key={label} href={href}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-label font-semibold transition-all ${
+                isActive
+                  ? 'bg-orange-50 text-orange-600 font-bold'
+                  : 'text-neutral-500 hover:bg-orange-50 hover:text-orange-500'
+              }`}>
+              <span className="material-symbols-outlined"
+                style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                {icon}
+              </span>
+              {label}
+            </Link>
+          );
+        })}
       </aside>
 
       {/* ── Main area ───────────────────────────────────────────── */}
-      <div className="flex-1 lg:ml-20 flex flex-col min-h-screen">
+      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
 
         {/* Top navbar */}
         <header className="sticky top-0 z-30 bg-white border-b border-neutral-100 h-14 flex items-center justify-between px-5 shadow-sm">
           <div className="flex items-center gap-4">
-            <span className="text-sm font-headline font-black text-orange-500 hidden sm:block">ThalirVerse</span>
+            <span className="text-sm font-headline font-black text-orange-500 hidden sm:block lg:hidden">ThalirVerse</span>
             {/* Breadcrumb */}
             <nav className="hidden md:flex items-center gap-1.5 text-xs font-label">
               <Link href="/dashboard" className="text-neutral-400 hover:text-orange-500 transition-colors">My Courses</Link>
@@ -282,12 +291,13 @@ export default function CourseView({ params }: { params: Promise<{ id: string }>
               </div>
             </div>
 
-            <div className="flex-1 py-3 px-3 space-y-1">
+            <StaggerGrid className="flex-1 py-3 px-3 space-y-1">
               {course.lessons?.map((lesson: any, i: number) => {
                 const done    = completedIds.has(lesson.id);
                 const active  = activeLesson?.id === lesson.id;
                 return (
-                  <button key={lesson.id} onClick={() => { setActiveLesson(lesson); isCompletedRef.current = done; setIsCompleted(done); }}
+                  <StaggerItem key={lesson.id}>
+                  <button onClick={() => { setActiveLesson(lesson); isCompletedRef.current = done; setIsCompleted(done); }}
                     className={`w-full text-left flex items-start gap-3 p-4 rounded-2xl transition-all group ${
                       active   ? 'bg-white border-2 border-orange-500 shadow-lg shadow-orange-500/10' :
                       done     ? 'bg-orange-50/50 border border-orange-100 hover:shadow-md'           :
@@ -316,6 +326,7 @@ export default function CourseView({ params }: { params: Promise<{ id: string }>
                       </p>
                     </div>
                   </button>
+                  </StaggerItem>
                 );
               })}
 
@@ -343,7 +354,7 @@ export default function CourseView({ params }: { params: Promise<{ id: string }>
                   )}
                 </div>
               )}
-            </div>
+            </StaggerGrid>
 
             {/* Ask a question */}
             <div className="px-4 py-4 border-t border-neutral-100 shrink-0">

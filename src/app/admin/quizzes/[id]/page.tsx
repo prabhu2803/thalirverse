@@ -2,7 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { fadeUp } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
 const ALPHA = ['A', 'B', 'C', 'D'];
 
@@ -106,14 +109,7 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading quiz...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="rows" count={4} />;
   }
 
   return (
@@ -143,7 +139,7 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
       </header>
 
       <main className="max-w-3xl mx-auto px-6 pt-8">
-        <form onSubmit={handleSave} className="space-y-6">
+        <motion.form onSubmit={handleSave} className="space-y-6" initial="hidden" animate="visible" variants={fadeUp}>
           {successMsg && (
             <div className="p-4 text-sm text-green-600 bg-green-50 rounded-2xl border border-green-100 font-bold flex items-center gap-2">
               <span className="material-symbols-outlined">check_circle</span>{successMsg}
@@ -248,7 +244,7 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
               {saving ? 'Saving...' : isNewQuiz ? 'Create Quiz' : 'Save Quiz'}
             </button>
           </div>
-        </form>
+        </motion.form>
       </main>
     </div>
   );

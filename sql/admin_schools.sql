@@ -1,5 +1,5 @@
 -- =======================================================
--- Links admin accounts (YI_ADMIN / SUPER_ADMIN) to the schools they
+-- Links admin accounts (TEACHER_ADMIN / SUPER_ADMIN) to the schools they
 -- cover. Many-to-many: one admin can be assigned to several schools,
 -- and a school can have more than one admin.
 -- Run once in Supabase SQL Editor.

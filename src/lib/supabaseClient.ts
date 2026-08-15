@@ -404,10 +404,37 @@ export const dataService = {
     const { data, error } = await supabase
       .from('profiles')
       .select('id, full_name, role, created_at')
-      .in('role', ['YI_ADMIN', 'SUPER_ADMIN'])
+      .in('role', ['TEACHER_ADMIN', 'SUPER_ADMIN'])
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data ?? [];
+  },
+
+  // Every user regardless of role — for the "assign a role to any user"
+  // search on the Team page. Small dataset by design (school-program scale),
+  // so a single fetch + client-side filter is fine.
+  async getAllUsersDirectory() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, school')
+      .order('full_name');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  // Super Admin only — enforced server-side in /api/admin/set-role, which
+  // also updates admin_schools (clears it on demotion to STUDENT, replaces
+  // it when schoolIds are supplied for a TEACHER_ADMIN).
+  async setUserRole(userId: string, role: 'STUDENT' | 'TEACHER_ADMIN' | 'SUPER_ADMIN', schoolIds?: string[]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Session expired — please log in again.');
+    const res = await fetch('/api/admin/set-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ userId, role, schoolIds: schoolIds ?? [] }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to change role.');
   },
 
   // admin_id -> [{ id, name }] for every assigned school, in one query.

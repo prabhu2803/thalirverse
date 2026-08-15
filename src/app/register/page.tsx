@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
+import { fadeUp, stepSlide } from '@/lib/motion';
 
 export default function Register() {
   const router = useRouter();
@@ -99,7 +101,8 @@ export default function Register() {
         <span className="material-symbols-outlined">arrow_back</span>
         Back to Home
       </Link>
-      <div className="max-w-2xl w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl overflow-hidden border border-slate-100 dark:border-neutral-800">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp}
+        className="max-w-2xl w-full bg-white dark:bg-neutral-900 rounded-3xl shadow-xl overflow-hidden border border-slate-100 dark:border-neutral-800">
         <div className="p-8 sm:p-12">
           
           {/* Header */}
@@ -120,9 +123,11 @@ export default function Register() {
             </div>
           )}
 
+          <AnimatePresence mode="wait">
           {step === 1 ? (
             /* STEP 1: Student Information */
-            <form onSubmit={handleNext} className="space-y-6">
+            <motion.form key="step1" onSubmit={handleNext} className="space-y-6"
+              initial="enter" animate="center" exit="exit" variants={stepSlide}>
               <div className="flex flex-col">
                 <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Full Name *</label>
                 <input
@@ -230,10 +235,11 @@ export default function Register() {
               >
                 Continue to School Details
               </button>
-            </form>
+            </motion.form>
           ) : (
             /* STEP 2: School & Yi Details */
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <motion.form key="step2" onSubmit={handleSubmit} className="space-y-6"
+              initial="enter" animate="center" exit="exit" variants={stepSlide}>
               <div className="flex flex-col">
                 <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">School Name *</label>
                 <input
@@ -311,19 +317,20 @@ export default function Register() {
                   {loading ? 'Creating Account...' : 'Create Account'}
                 </button>
               </div>
-            </form>
+            </motion.form>
           )}
+          </AnimatePresence>
 
           <div className="mt-8 text-center">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               Already have an account?{" "}
-              <a href="/" className="font-semibold text-orange-600 hover:text-orange-500 dark:text-orange-400">
+              <Link href="/login" className="font-semibold text-orange-600 hover:text-orange-500 dark:text-orange-400">
                 Log in here
-              </a>
+              </Link>
             </p>
           </div>
         </div>
-      </div>
+      </motion.div>
     </main>
   );
 }

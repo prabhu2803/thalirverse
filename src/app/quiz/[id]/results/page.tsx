@@ -1,8 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { motion, animate } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { dataService, supabase } from '@/lib/supabaseClient';
+import { fadeUp, popIn, staggerContainer, springSoft } from '@/lib/motion';
+import { SkeletonBlock } from '@/components/motion/Skeleton';
+
+function fireConfetti() {
+  confetti({
+    particleCount: 80,
+    spread: 70,
+    startVelocity: 45,
+    origin: { y: 0.6 },
+    colors: ['#f97316', '#fb923c', '#fbbf24', '#22c55e'],
+    disableForReducedMotion: true,
+  });
+}
 
 const SIDEBAR_LINKS = [
   { label: 'Dashboard',   href: '/dashboard', icon: 'home' },
@@ -20,6 +35,28 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
   const [result,   setResult]   = useState<any>(null);
   const [showAll,  setShowAll]  = useState(false);
   const [xpAwarded, setXpAwarded] = useState(false);
+  const [displayScore, setDisplayScore] = useState(0);
+  const confettiFiredRef = useRef(false);
+
+  // Fires exactly once, only when XP is actually (freshly) awarded this
+  // session — never on a refresh/revisit, never on a fail.
+  useEffect(() => {
+    if (xpAwarded && !confettiFiredRef.current) {
+      confettiFiredRef.current = true;
+      fireConfetti();
+    }
+  }, [xpAwarded]);
+
+  // Count the score ring's percentage up from 0 instead of snapping to it.
+  useEffect(() => {
+    if (!result) return;
+    const controls = animate(0, result.score, {
+      duration: 1,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: latest => setDisplayScore(Math.round(latest)),
+    });
+    return () => controls.stop();
+  }, [result?.score]);
 
   useEffect(() => {
     (async () => {
@@ -52,10 +89,20 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
 
   if (!course || !result) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Results...</span>
+      <div className="min-h-screen bg-neutral-50 p-6">
+        <div className="max-w-4xl mx-auto lg:ml-56 space-y-6">
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden flex flex-col md:flex-row">
+            <div className="flex-1 p-8 space-y-4">
+              <SkeletonBlock className="h-5 w-32 rounded-full" />
+              <SkeletonBlock className="h-8 w-2/3 rounded-full" />
+              <SkeletonBlock className="h-4 w-full rounded-full" />
+              <SkeletonBlock className="h-10 w-48 rounded-xl" />
+            </div>
+            <div className="flex items-center justify-center p-8 min-w-[200px]">
+              <SkeletonBlock className="w-28 h-28 rounded-full" />
+            </div>
+          </div>
+          <SkeletonBlock className="h-40 w-full rounded-3xl" />
         </div>
       </div>
     );
@@ -112,10 +159,10 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
 
       {/* ── Main content ───────────────────────────────────────── */}
       <main className="lg:ml-56 flex-1 p-6 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <motion.div className="max-w-4xl mx-auto space-y-6" initial="hidden" animate="visible" variants={staggerContainer}>
 
           {/* Hero row: left (status + CTA) + right (score circle) */}
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+          <motion.div variants={fadeUp} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
             <div className="flex flex-col md:flex-row">
               {/* Left: hero text */}
               <div className="flex-1 p-8">
@@ -161,16 +208,17 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                 <div className="relative w-28 h-28 mb-3">
                   <svg className="w-full h-full -rotate-90">
                     <circle cx="56" cy="56" r="46" fill="none" stroke="#fed7aa" strokeWidth="10" />
-                    <circle cx="56" cy="56" r="46" fill="none" stroke="#f97316" strokeWidth="10"
+                    <motion.circle cx="56" cy="56" r="46" fill="none" stroke="#f97316" strokeWidth="10"
                       strokeLinecap="round"
                       strokeDasharray={`${2 * Math.PI * 46}`}
-                      strokeDashoffset={`${2 * Math.PI * 46 * (1 - score / 100)}`}
-                      className="transition-[stroke-dashoffset] duration-1000" />
+                      initial={{ strokeDashoffset: 2 * Math.PI * 46 }}
+                      animate={{ strokeDashoffset: 2 * Math.PI * 46 * (1 - score / 100) }}
+                      transition={springSoft} />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="material-symbols-outlined text-orange-500 text-2xl mb-0.5"
                       style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
-                    <span className="text-2xl font-black text-neutral-900">{score}%</span>
+                    <span className="text-2xl font-black text-neutral-900">{displayScore}%</span>
                   </div>
                 </div>
                 <p className="text-xs font-label font-bold text-neutral-500 uppercase tracking-wider">Score</p>
@@ -192,11 +240,11 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* Performance Breakdown */}
           {breakdown.length > 0 && (
-            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+            <motion.div variants={fadeUp} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
                 <h3 className="font-headline font-bold text-base">Performance Breakdown</h3>
                 <button onClick={() => setShowAll(!showAll)}
@@ -240,14 +288,15 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                   </button>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Bottom row: Badge + Share */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Badge */}
+          <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Badge — independent celebratory pop, not tied to the parent stagger */}
             {passed && (
-              <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6 text-white flex items-center gap-4 shadow-lg shadow-orange-500/20">
+              <motion.div initial="hidden" animate="visible" variants={popIn}
+                className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-3xl p-6 text-white flex items-center gap-4 shadow-lg shadow-orange-500/20">
                 <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-3xl"
                     style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
@@ -259,7 +308,7 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                 <Link href="/profile" className="shrink-0">
                   <span className="material-symbols-outlined">chevron_right</span>
                 </Link>
-              </div>
+              </motion.div>
             )}
             {!passed && (
               <Link href={`/courses/${id}`}
@@ -291,8 +340,8 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                 ))}
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </main>
     </div>
   );

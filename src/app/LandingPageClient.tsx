@@ -1,0 +1,417 @@
+'use client';
+
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { fadeUp, staggerContainer, popIn } from '@/lib/motion';
+import { Reveal } from '@/components/motion/Reveal';
+
+// Keyed by module id (stable) rather than the free-text `category` column,
+// so every real seeded module (road-safety, masoom, entrepreneurship,
+// leadership) reliably gets its own tag/color/cover image.
+const MODULE_MEDIA: Record<string, { tag: string; tagClass: string; icon: string; gradient: string; image: string }> = {
+  default:            { tag: 'Foundation', tagClass: 'bg-orange-100 text-orange-700', icon: 'auto_stories',  gradient: 'from-orange-400 to-orange-600', image: '' },
+  'road-safety':      { tag: 'Foundation', tagClass: 'bg-rose-100 text-rose-700',     icon: 'traffic',       gradient: 'from-rose-400 to-rose-600',     image: '/courses/road-safety.svg' },
+  masoom:             { tag: 'Social',     tagClass: 'bg-sky-100 text-sky-700',       icon: 'shield',        gradient: 'from-sky-400 to-sky-600',       image: '/courses/masoom.svg' },
+  entrepreneurship:   { tag: 'Business',   tagClass: 'bg-amber-100 text-amber-700',   icon: 'rocket_launch', gradient: 'from-amber-400 to-orange-500',  image: '/courses/entrepreneurship.svg' },
+  leadership:         { tag: 'Leadership', tagClass: 'bg-purple-100 text-purple-700', icon: 'stars',         gradient: 'from-purple-400 to-purple-600', image: '/courses/leadership.svg' },
+};
+
+const FEATURES = [
+  { icon: 'interactive_space', title: 'Interactive Learning', desc: 'Engage with hands-on video modules designed for active participation and real-world skill building.' },
+  { icon: 'quiz',              title: 'Smart Quizzes',        desc: 'Reinforce knowledge with adaptive assessments that track mastery and highlight areas to improve.' },
+  { icon: 'workspace_premium', title: 'Global Certificates', desc: 'Earn blockchain-verified certificates recognised by Young Indians chapters nationwide.' },
+  { icon: 'military_tech',     title: 'Achievement Badges',  desc: 'Unlock badges and XP for every milestone — from first lesson to full graduation.' },
+];
+
+export default function LandingPageClient({ modules }: { modules: any[] }) {
+  return (
+    <div className="bg-white font-body text-neutral-900 min-h-screen">
+
+      {/* ── Navbar ─────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-neutral-100 shadow-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <span className="material-symbols-outlined text-orange-500" style={{ fontSize: 28 }}>school</span>
+            <span className="text-xl font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
+          </Link>
+
+          {/* Nav links */}
+          <nav className="hidden md:flex items-center gap-1">
+            {[
+              { label: 'Home',     href: '/' },
+              { label: 'Explore',  href: '#courses' },
+              { label: 'Learning', href: '#how-it-works' },
+              { label: 'Mentors',  href: '#features' },
+            ].map(item => (
+              <Link key={item.label} href={item.href}
+                className="px-4 py-2 text-sm font-label font-semibold text-neutral-500 hover:text-orange-500 hover:bg-orange-50 rounded-full transition-all">
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Auth buttons */}
+          <div className="flex items-center gap-3">
+            <Link href="/login"
+              className="hidden sm:block px-4 py-2 text-sm font-label font-bold text-neutral-600 hover:text-orange-500 transition-colors">
+              Sign In
+            </Link>
+            <Link href="/register"
+              className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-xl shadow-[0_4px_10px_rgba(249,115,22,0.25)] hover:-translate-y-0.5 active:translate-y-0 transition-all">
+              Join Now
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Hero ───────────────────────────────────────────────────────── */}
+      <motion.section className="max-w-7xl mx-auto px-6 pt-16 pb-20 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center"
+        initial="hidden" animate="visible" variants={staggerContainer}>
+        {/* Left */}
+        <div className="space-y-7">
+          <motion.h1 variants={fadeUp} className="text-6xl lg:text-7xl font-headline font-black leading-[1.05] tracking-tight text-neutral-900">
+            Learn.<br />Lead.<br /><span className="text-orange-500">Grow.</span>
+          </motion.h1>
+
+          <motion.p variants={fadeUp} className="text-lg text-neutral-500 max-w-md leading-relaxed">
+            Empowering the next generation of young Indians with modern skills, leadership, and digital literacy through the Yi Thalir programme.
+          </motion.p>
+
+          <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4">
+            <Link href="/register"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl shadow-[0_8px_20px_-4px_rgba(249,115,22,0.4)] hover:-translate-y-0.5 active:translate-y-0 transition-all text-base">
+              Register Now
+              <span className="material-symbols-outlined text-xl">arrow_forward</span>
+            </Link>
+            <Link href="#courses"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white border-2 border-neutral-200 hover:border-orange-500 hover:text-orange-500 text-neutral-700 font-bold rounded-2xl transition-all text-base">
+              Explore Courses
+              <span className="material-symbols-outlined text-xl">south</span>
+            </Link>
+          </motion.div>
+        </div>
+
+        {/* Right — illustration + floating card */}
+        <motion.div variants={fadeUp} className="relative flex justify-center items-center">
+          <motion.img
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJ9Ew6FJ1h88hvpP4SFDJ-qjXVg68_xE3u0FE_IXLAclxxz6eQxjyYhBR8wOfcf-RgAIf4bMYa9srKSAuupReOYdEGeJBKIVcwnHUw6bEkkUnPPb3yIXoQRWHEotLv8kywgDpdi_wTng2PTnT0VWZO3s4Qhkaojnjjer4POIW792XGfO8AzP6mfL-HRpMmYUQVlhmiGtGdjADrm9xjKCpawJuP7rVG6Ew0ePJhumM1VKTGq7x9JEKiBNAZIgAyRNZ-V1zgo9Q-U7A"
+            alt="ThalirVerse students learning"
+            className="w-full max-w-lg h-auto object-contain drop-shadow-xl"
+            animate={{ y: [0, -12, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          />
+
+          {/* Floating stat card */}
+          <motion.div variants={popIn} className="absolute bottom-4 left-0 sm:left-4 bg-white rounded-2xl shadow-xl border border-neutral-100 p-4 flex items-center gap-3 max-w-[200px]">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-orange-500" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+            </div>
+            <div>
+              <p className="text-xs font-label font-bold text-neutral-400 uppercase tracking-wider">Certified</p>
+              <p className="text-sm font-bold text-neutral-900 leading-tight">Thalir Graduate</p>
+            </div>
+          </motion.div>
+
+          {/* Floating badge */}
+          <motion.div variants={popIn} className="absolute top-4 right-0 sm:right-4 bg-green-500 text-white rounded-2xl px-3 py-2 flex items-center gap-1.5 shadow-lg shadow-green-500/30">
+            <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+            <span className="text-xs font-bold font-label">Yi Certified</span>
+          </motion.div>
+        </motion.div>
+      </motion.section>
+
+      {/* ── The Future of Education ────────────────────────────────────── */}
+      <section id="features" className="bg-neutral-50 border-t border-b border-neutral-100 py-20 px-6">
+        <Reveal className="max-w-7xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <h2 className="text-4xl font-headline font-black text-neutral-900">The Future of Education</h2>
+            <p className="text-neutral-500 mt-3 text-base leading-relaxed">
+              Empowering students with 21st-century skills through interactive, project-based digital learning.
+            </p>
+          </div>
+
+          <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={staggerContainer}>
+            {FEATURES.map((f, i) => {
+              const isHighlighted = i === 3;
+              return (
+                <motion.div key={f.icon} variants={fadeUp}
+                  className={`rounded-3xl p-7 flex flex-col gap-5 transition-all hover:-translate-y-1 ${
+                    isHighlighted
+                      ? 'bg-orange-500 text-white shadow-xl shadow-orange-500/20'
+                      : 'bg-white border border-neutral-100 shadow-sm hover:shadow-md'
+                  }`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                    isHighlighted ? 'bg-white/20' : 'bg-orange-50'
+                  }`}>
+                    <span className={`material-symbols-outlined text-2xl ${isHighlighted ? 'text-white' : 'text-orange-500'}`}
+                      style={{ fontVariationSettings: "'FILL' 1" }}>
+                      {f.icon}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className={`font-headline font-bold text-lg mb-2 ${isHighlighted ? 'text-white' : 'text-neutral-900'}`}>
+                      {f.title}
+                    </h3>
+                    <p className={`text-sm leading-relaxed ${isHighlighted ? 'text-orange-100' : 'text-neutral-500'}`}>
+                      {f.desc}
+                    </p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </Reveal>
+      </section>
+
+      {/* ── Featured Courses ───────────────────────────────────────────── */}
+      <section id="courses" className="max-w-7xl mx-auto px-6 py-20">
+        <Reveal>
+          <div className="flex items-center justify-between mb-10">
+            <div>
+              <h2 className="text-4xl font-headline font-black text-neutral-900">Featured Courses</h2>
+              <p className="text-neutral-500 mt-1.5">Master essential life skills through guided video modules and quizzes.</p>
+            </div>
+            <Link href="/register"
+              className="hidden sm:flex items-center gap-1.5 text-sm font-bold text-orange-500 hover:text-orange-600 transition-colors">
+              View All
+              <span className="material-symbols-outlined text-base">arrow_forward</span>
+            </Link>
+          </div>
+
+          {modules.length > 0 ? (
+            <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+              initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={staggerContainer}>
+              {modules.map((m) => {
+                const meta = MODULE_MEDIA[m.id] ?? MODULE_MEDIA.default;
+                return (
+                  <motion.div key={m.id} variants={fadeUp}>
+                  <Link href="/register"
+                    className="group bg-white rounded-3xl border border-neutral-100 shadow-sm hover:shadow-lg hover:border-orange-200 hover:-translate-y-1 transition-all overflow-hidden flex flex-col">
+                    {/* Card image */}
+                    <div className={`bg-gradient-to-br ${meta.gradient} h-40 relative overflow-hidden`}>
+                      {meta.image ? (
+                        <img src={meta.image} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="absolute inset-0 flex items-center justify-center material-symbols-outlined text-white text-5xl opacity-80"
+                          style={{ fontVariationSettings: "'FILL' 1" }}>
+                          {meta.icon}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Card content */}
+                    <div className="p-5 flex flex-col flex-1">
+                      <span className={`self-start text-[10px] font-label font-black px-2.5 py-1 rounded-full uppercase tracking-wider mb-3 ${meta.tagClass}`}>
+                        {meta.tag}
+                      </span>
+                      <h3 className="font-headline font-bold text-base text-neutral-900 mb-2 leading-snug group-hover:text-orange-500 transition-colors">
+                        {m.title}
+                      </h3>
+                      <p className="text-xs text-neutral-500 leading-relaxed flex-1 line-clamp-2">
+                        {m.description}
+                      </p>
+
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-100">
+                        <span className="text-xs font-label font-bold text-neutral-400 uppercase tracking-wider">
+                          {m.lessonCount} {m.lessonCount === 1 ? 'Lesson' : 'Lessons'}
+                        </span>
+                        <span className="material-symbols-outlined text-orange-500 text-lg group-hover:translate-x-1 transition-transform">
+                          arrow_forward
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          ) : (
+            /* Fallback skeleton cards when no published modules yet */
+            <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+              initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={staggerContainer}>
+              {[
+                { id: 'road-safety',      title: 'Road Safety',          desc: 'Learn essential traffic rules, pedestrian safety and road metrics.' },
+                { id: 'masoom',           title: 'Masoom',                desc: 'Acquire critical personal body safety awareness and protective skills.' },
+                { id: 'entrepreneurship', title: 'Entrepreneurship 101', desc: 'Harness business development, problem-solving, and startup tools.' },
+                { id: 'leadership',       title: 'Leadership Explorer',  desc: 'Master public speaking, emotional intelligence, and teamwork dynamics.' },
+              ].map((c) => {
+                const meta = MODULE_MEDIA[c.id] ?? MODULE_MEDIA.default;
+                return (
+                  <motion.div key={c.id} variants={fadeUp}>
+                  <Link href="/register"
+                    className="group bg-white rounded-3xl border border-neutral-100 shadow-sm hover:shadow-lg hover:border-orange-200 hover:-translate-y-1 transition-all overflow-hidden flex flex-col">
+                    <div className={`bg-gradient-to-br ${meta.gradient} h-40 relative overflow-hidden`}>
+                      {meta.image ? (
+                        <img src={meta.image} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="absolute inset-0 flex items-center justify-center material-symbols-outlined text-white text-5xl opacity-80"
+                          style={{ fontVariationSettings: "'FILL' 1" }}>{meta.icon}</span>
+                      )}
+                    </div>
+                    <div className="p-5 flex flex-col flex-1">
+                      <span className={`self-start text-[10px] font-label font-black px-2.5 py-1 rounded-full uppercase tracking-wider mb-3 ${meta.tagClass}`}>
+                        {meta.tag}
+                      </span>
+                      <h3 className="font-headline font-bold text-base text-neutral-900 mb-2 leading-snug group-hover:text-orange-500 transition-colors">
+                        {c.title}
+                      </h3>
+                      <p className="text-xs text-neutral-500 leading-relaxed flex-1 line-clamp-2">{c.desc}</p>
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-neutral-100">
+                        <span className="text-xs font-label font-bold text-neutral-400 uppercase tracking-wider">Coming Soon</span>
+                        <span className="material-symbols-outlined text-orange-500 text-lg group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                      </div>
+                    </div>
+                  </Link>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </Reveal>
+      </section>
+
+      {/* ── How It Works ───────────────────────────────────────────────── */}
+      <section id="how-it-works" className="bg-neutral-50 border-t border-neutral-100 py-20 px-6">
+        <Reveal className="max-w-7xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <h2 className="text-4xl font-headline font-black text-neutral-900">Your Learning Journey</h2>
+            <p className="text-neutral-500 mt-3">Get set up and earn verified graduate credentials in 4 easy steps.</p>
+          </div>
+
+          <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10"
+            initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={staggerContainer}>
+            {[
+              { step: '01', title: 'Register',       desc: 'Sign up with your school profile, standard, and Young Indians chapter.' },
+              { step: '02', title: 'Watch Modules',  desc: 'Interact with guided video modules that track your playback progress.' },
+              { step: '03', title: 'Pass Quizzes',   desc: 'Clear module assessments with an 80% pass grade to confirm mastery.' },
+              { step: '04', title: 'Earn Credentials', desc: 'Unlock your graduate badge, XP points, and a digital certificate.' },
+            ].map(item => (
+              <motion.div key={item.step} variants={fadeUp} className="flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 rounded-3xl bg-orange-500 text-white font-headline font-black text-xl flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className="font-headline font-bold text-lg text-neutral-900">{item.title}</h3>
+                  <p className="text-sm text-neutral-500 mt-2 leading-relaxed max-w-[200px] mx-auto">{item.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </Reveal>
+      </section>
+
+      {/* ── Benefits ───────────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <Reveal>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="order-2 lg:order-1">
+              <img
+                alt="Learning Benefits"
+                className="w-full max-w-md mx-auto h-auto object-contain rounded-3xl"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHdN_azNeFWowhV_vEuBrWQKS1rQ8UT9v9K3obv8NWAvk2ZPhzSqrGvLbuxcovgb49t8ClmyhGTRgCwZGccqJTvn4T90OKlHK4MsIUVRBJ21J6e0mKvNTpDzGNCOKAAqCqFhxbdozbzzTA2bLr65rJ4ectJlWsfajGqISBLjFsEOkI8klC8FReRPQnTaN2r77whXpMa8fEP6ua6O1UJGNjswHEDcGccyMzReSyHhAL8tz_DqAy9dSeZuXkvozYxiYlOD442qZC2TQ"
+              />
+            </div>
+            <div className="order-1 lg:order-2 space-y-8">
+              <h2 className="text-4xl font-headline font-black leading-tight text-neutral-900">
+                Why Learn with ThalirVerse?
+              </h2>
+              <div className="space-y-6">
+                {[
+                  { icon: 'bolt',              title: 'Interactive Practical Skills', desc: 'Acquire critical safety, social awareness, and startup execution skills through engaging video content.' },
+                  { icon: 'groups',            title: 'Leader Mindsets',              desc: 'Adopt constructive teamwork frameworks and emotional decision-making skills to lead your chapter.' },
+                  { icon: 'workspace_premium', title: 'Digital Credentials',          desc: 'Earn downloadable, verifiable certificates recognised by Young Indians nationwide.' },
+                ].map(b => (
+                  <div key={b.title} className="flex gap-4">
+                    <div className="w-11 h-11 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>{b.icon}</span>
+                    </div>
+                    <div>
+                      <h4 className="font-headline font-bold text-base text-neutral-900">{b.title}</h4>
+                      <p className="text-sm text-neutral-500 mt-1 leading-relaxed">{b.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* ── CTA Banner ─────────────────────────────────────────────────── */}
+      <section className="bg-neutral-900 py-20 px-6">
+        <Reveal className="max-w-3xl mx-auto text-center space-y-6">
+          <h2 className="text-4xl lg:text-5xl font-headline font-black text-white leading-tight">
+            Ready to start your journey?
+          </h2>
+          <p className="text-neutral-400 text-lg max-w-xl mx-auto leading-relaxed">
+            Join thousands of young leaders who are building skills, earning badges, and making an impact with Yi Thalir.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+            <Link href="/register"
+              className="w-full sm:w-auto px-10 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl text-base shadow-[0_8px_20px_-4px_rgba(249,115,22,0.5)] hover:-translate-y-0.5 active:translate-y-0 transition-all text-center">
+              Create Account
+            </Link>
+            <Link href="#courses"
+              className="w-full sm:w-auto px-10 py-4 bg-transparent border-2 border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white font-bold rounded-2xl text-base transition-all text-center">
+              Explore Courses
+            </Link>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer className="bg-white border-t border-neutral-100 py-8 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          {/* Brand */}
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-orange-500" style={{ fontSize: 24 }}>school</span>
+            <span className="text-lg font-headline font-black text-orange-500 tracking-tight">ThalirVerse</span>
+          </div>
+
+          {/* Navigate */}
+          <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {[
+              { label: 'Home',          href: '/' },
+              { label: 'Courses',       href: '#courses' },
+              { label: 'How It Works',  href: '#how-it-works' },
+              { label: 'Sign In',       href: '/login' },
+              { label: 'Join Now',      href: '/register' },
+            ].map(item => (
+              <Link key={item.label} href={item.href}
+                className="text-sm text-neutral-600 hover:text-orange-500 transition-colors">
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {/* Partner logos */}
+        <div className="max-w-7xl mx-auto mt-6 pt-6 border-t border-neutral-100 flex flex-col items-center gap-4">
+          <p className="text-[10px] font-label font-bold text-neutral-400 uppercase tracking-widest">In association with</p>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+            <img src="/partners/thalir-logo.png" alt="Thalir" className="h-9 w-auto object-contain" />
+            <img src="/partners/yi-logo.png" alt="Young Indians (Yi)" className="h-9 w-auto object-contain" />
+            <img src="/partners/cii-logo.png" alt="Confederation of Indian Industry (CII)" className="h-9 w-auto object-contain" />
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto mt-6 pt-4 border-t border-neutral-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-neutral-400 font-label">
+            © 2026 Young Indians (Yi) Thalir. All rights reserved. Powered by Yi.
+          </p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="text-xs text-neutral-400 hover:text-orange-500 font-label transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="text-xs text-neutral-400 hover:text-orange-500 font-label transition-colors">Terms &amp; Conditions</Link>
+            <a href="https://www.strawlabs.in" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-orange-500 font-label transition-colors">
+              Powered by
+              <img src="/partners/strawlabs-logo.png" alt="StrawLabs" className="h-14 w-auto object-contain rounded" />
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

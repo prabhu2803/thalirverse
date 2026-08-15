@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { fadeUp, staggerContainer, springSoft } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from '../AdminSidebar';
+import ActivityTrendChart from './ActivityTrendChart';
 
 const REGIONS = ['North', 'South', 'East', 'West', 'Northeast', 'Other'];
 
@@ -23,15 +27,15 @@ export default function SuperAdminAnalytics() {
   const [admins, setAdmins] = useState<any[]>([]);
   const [contentStats, setContentStats] = useState<{ totalQuestions: number; totalQuizzes: number; publishedQuizzes: number } | null>(null);
   const [loadError, setLoadError] = useState('');
-  // Yi Admin sees only their assigned schools; null = unscoped (Super Admin)
+  // Teacher Admin sees only their assigned schools; null = unscoped (Super Admin)
   const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const admin = await dataService.getActiveStudent();
-        // Both YI_ADMIN and SUPER_ADMIN can view analytics
-        if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
+        // Both TEACHER_ADMIN and SUPER_ADMIN can view analytics
+        if (!admin || !['TEACHER_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
           router.push('/login');
           return;
         }
@@ -43,10 +47,17 @@ export default function SuperAdminAnalytics() {
           dataService.getAllProgress(),
           dataService.getAllQuizAttempts(),
         ]);
-        if (admin.role === 'YI_ADMIN') {
+        if (admin.role === 'TEACHER_ADMIN') {
           const schoolIds = await dataService.getAdminSchoolIds(admin.id);
           setScopedSchoolIds(schoolIds);
           s = s.filter((st: any) => st.school_id && schoolIds.includes(st.school_id));
+          // Progress/quiz attempts are fetched platform-wide above — scope them
+          // to the same student set, otherwise Recent Activity and Avg Quiz
+          // Score leak other schools' data (and show "Unknown Student" for
+          // names this admin was never given).
+          const scopedStudentIds = new Set(s.map((st: any) => st.id));
+          p = p.filter((row: any) => scopedStudentIds.has(row.student_id));
+          q = q.filter((row: any) => scopedStudentIds.has(row.student_id));
         }
         setStudents(s);
         setModules(m);
@@ -274,6 +285,26 @@ export default function SuperAdminAnalytics() {
     .sort((a, b) => b.students - a.students);
 
   const handleExportReport = () => {
+    // Same 30-day window as the Activity Trend chart — table-view fallback
+    // for the same data, reachable without hovering.
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const trendDays = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today); d.setDate(d.getDate() - (29 - i)); return d;
+    });
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+    const lessonsByDay: Record<string, number> = {};
+    allProgress.forEach(p => {
+      if (p.status !== 'COMPLETED' || !p.completed_at) return;
+      const k = dayKey(new Date(p.completed_at));
+      lessonsByDay[k] = (lessonsByDay[k] ?? 0) + 1;
+    });
+    const quizzesByDay: Record<string, number> = {};
+    allQuizAttempts.forEach(a => {
+      if (!a.attempted_at) return;
+      const k = dayKey(new Date(a.attempted_at));
+      quizzesByDay[k] = (quizzesByDay[k] ?? 0) + 1;
+    });
+
     const lines: string[] = [
       'ThalirVerse Performance Analytics Report', '',
       'Summary',
@@ -284,6 +315,9 @@ export default function SuperAdminAnalytics() {
       'Module Completion Rates',
       'Module,Completed,Rate',
       ...moduleStats.map(m => `${m.title},${m.completed}/${totalStudents},${m.rate}%`), '',
+      'Activity Trend (Last 30 Days)',
+      'Date,Lessons Completed,Quiz Attempts',
+      ...trendDays.map(d => `${dayKey(d)},${lessonsByDay[dayKey(d)] ?? 0},${quizzesByDay[dayKey(d)] ?? 0}`), '',
       'Region Breakdown',
       'Region,Students,Graduates,Rate',
       ...regionStats.map(r => `${r.region},${r.count},${r.graduates},${r.rate}%`), '',
@@ -300,14 +334,7 @@ export default function SuperAdminAnalytics() {
     document.body.removeChild(link);
   };
 
-  if (loading) return (
-    <div className="flex justify-center items-center min-h-screen bg-white">
-      <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-        <span className="animate-spin text-4xl">⏳</span>
-        <span>Loading Analytics...</span>
-      </div>
-    </div>
-  );
+  if (loading) return <PageSkeleton shape="cards" count={4} />;
 
   return (
     <div className="flex overflow-hidden h-screen bg-neutral-50 font-body text-neutral-900">
@@ -315,7 +342,7 @@ export default function SuperAdminAnalytics() {
 
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
 
-      <main className="px-8 pt-8 pb-12 space-y-10 max-w-7xl">
+      <main className="px-8 pt-8 pb-12 space-y-10 w-full">
 
         {/* ── Page header ── */}
         <section className="flex flex-col sm:flex-row justify-between sm:items-end gap-4">
@@ -354,7 +381,8 @@ export default function SuperAdminAnalytics() {
         )}
 
         {/* ── Summary cards ── */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <motion.section className="grid grid-cols-2 lg:grid-cols-4 gap-6"
+          initial="hidden" animate="visible" variants={staggerContainer}>
           {[
             {
               label: 'Total Students', value: totalStudents, sub: 'Registered',
@@ -373,7 +401,7 @@ export default function SuperAdminAnalytics() {
               iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', icon: 'trending_up',
             },
           ].map(card => (
-            <div key={card.label}
+            <motion.div key={card.label} variants={fadeUp}
               className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 group hover:shadow-xl hover:shadow-orange-100/50 transition-all duration-300">
               <div className="flex justify-between items-start mb-4">
                 <div className={`w-12 h-12 ${card.iconBg} rounded-2xl flex items-center justify-center ${card.iconColor} group-hover:scale-110 transition-transform`}>
@@ -383,9 +411,9 @@ export default function SuperAdminAnalytics() {
               <p className="text-gray-500 font-medium text-sm">{card.label}</p>
               <h4 className="text-2xl font-black text-slate-900 mt-1">{card.value}</h4>
               <p className="text-xs text-neutral-400 font-medium mt-4">{card.sub}</p>
-            </div>
+            </motion.div>
           ))}
-        </section>
+        </motion.section>
 
         {/* ── Super Admin: platform oversight ── */}
         {adminRole === 'SUPER_ADMIN' && (
@@ -440,7 +468,7 @@ export default function SuperAdminAnalytics() {
                           <td className="px-6 py-3">
                             <span className={`text-[10px] font-black px-2.5 py-1 rounded uppercase tracking-wider ${
                               a.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                            }`}>{a.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Yi Admin'}</span>
+                            }`}>{a.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Teacher Admin'}</span>
                           </td>
                           <td className="px-6 py-3 text-right text-neutral-500">
                             {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -474,10 +502,11 @@ export default function SuperAdminAnalytics() {
                         m.rate >= 75 ? 'bg-green-500' : m.rate >= 40 ? 'bg-orange-500' : 'bg-red-400'
                       }`} style={{ height: `${m.rate}%` }} />
                       <div className="absolute inset-x-0 top-2 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] font-black text-neutral-700 bg-white/90 px-1.5 py-0.5 rounded shadow-sm">{m.rate}%</span>
+                        <span className="text-[10px] font-black text-neutral-700 bg-white/90 px-1.5 py-0.5 rounded shadow-sm">{m.completed}/{totalStudents} ({m.rate}%)</span>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold text-neutral-400 text-center leading-tight">{m.title}</span>
+                    <span className="text-[10px] font-black text-neutral-600">{m.completed}/{totalStudents}</span>
                   </div>
                 ))}
               </div>
@@ -498,9 +527,12 @@ export default function SuperAdminAnalytics() {
                   <svg className="w-full h-full" viewBox="0 0 36 36">
                     <path className="text-neutral-100" stroke="currentColor" strokeWidth="4" fill="none"
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                    {donutArcs.filter(a => a.pct > 0).map(a => (
-                      <path key={a.label} className={a.text} stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round"
-                        strokeDasharray={`${a.pct}, 100`} strokeDashoffset={a.offset}
+                    {donutArcs.filter(a => a.pct > 0).map((a, i) => (
+                      <motion.path key={a.label} className={a.text} stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round"
+                        strokeDashoffset={a.offset}
+                        initial={{ strokeDasharray: '0, 100' }}
+                        animate={{ strokeDasharray: `${a.pct}, 100` }}
+                        transition={{ ...springSoft, delay: i * 0.15 }}
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     ))}
                   </svg>
@@ -517,7 +549,7 @@ export default function SuperAdminAnalytics() {
                         <span className="text-sm font-bold text-neutral-600">{s.label}</span>
                       </div>
                       <span className="text-sm font-black text-neutral-900">
-                        {totalStudents > 0 ? Math.round((s.count / totalStudents) * 100) : 0}%
+                        {s.count} <span className="text-neutral-400 font-bold">({totalStudents > 0 ? Math.round((s.count / totalStudents) * 100) : 0}%)</span>
                       </span>
                     </div>
                   ))}
@@ -526,6 +558,9 @@ export default function SuperAdminAnalytics() {
             )}
           </div>
         </div>
+
+        {/* ── Activity trend over time ── */}
+        <ActivityTrendChart progress={allProgress} quizAttempts={allQuizAttempts} />
 
         {/* ── Region + District breakdown ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -11,7 +11,7 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
     WHERE id = auth.uid()
-      AND role IN ('YI_ADMIN', 'SUPER_ADMIN')
+      AND role IN ('TEACHER_ADMIN', 'SUPER_ADMIN')
   );
 $$;
 
@@ -24,7 +24,7 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename IN ('profiles','chapters','schools','students','modules',
                         'lessons','quizzes','questions','answers',
-                        'progress','quiz_attempts','certificates')
+                        'progress','quiz_attempts','certificates','chat_messages')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
   END LOOP;

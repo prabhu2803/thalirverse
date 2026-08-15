@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Public_Sans } from "next/font/google";
+import { MotionConfig } from "framer-motion";
+import { springSoft } from "@/lib/motion";
 import "./globals.css";
 
 const inter = Inter({
@@ -34,7 +36,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-white font-body text-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
-        {children}
+        <MotionConfig reducedMotion="user" transition={springSoft}>
+          {children}
+        </MotionConfig>
       </body>
     </html>
   );

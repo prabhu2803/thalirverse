@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { fadeUp, staggerContainer } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
 const NAV_LINKS = [
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
@@ -57,14 +60,7 @@ export default function Explore() {
   );
 
   if (loading || !student) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Courses...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="cards" count={4} />;
   }
 
   return (
@@ -176,13 +172,15 @@ export default function Explore() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              initial="hidden" animate="visible" variants={staggerContainer}>
               {filtered.map(m => {
                 const colors = MODULE_COLORS[m.id] ?? { bg: 'bg-neutral-50', icon: 'text-neutral-500', gradient: 'from-neutral-500 to-neutral-700' };
                 const icon   = MODULE_ICONS[m.id] ?? 'auto_stories';
                 const lessonCount = m.lessons?.length ?? 0;
                 return (
-                  <Link key={m.id} href={`/courses/${m.id}`}
+                  <motion.div key={m.id} variants={fadeUp}>
+                  <Link href={`/courses/${m.id}`}
                     className="group bg-white rounded-2xl border border-neutral-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
                     {/* Card header */}
                     <div className={`bg-gradient-to-br ${colors.gradient} p-8 flex items-center justify-center`}>
@@ -209,9 +207,10 @@ export default function Explore() {
                       </div>
                     </div>
                   </Link>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           )}
         </main>
       </div>

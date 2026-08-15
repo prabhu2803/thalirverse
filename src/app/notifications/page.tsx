@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
 const NAV_LINKS = [
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
@@ -195,14 +196,7 @@ export default function Notifications() {
   const markRead    = (id: string) => setReadIds(prev => new Set([...prev, id]));
 
   if (loading || !student) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Notifications...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="rows" count={6} />;
   }
 
   const FILTER_ICONS: Record<string, string> = {

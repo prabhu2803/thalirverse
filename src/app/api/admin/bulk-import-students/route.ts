@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', user.id).single();
-  if (!callerProfile || !['YI_ADMIN', 'SUPER_ADMIN'].includes(callerProfile.role)) {
+  if (!callerProfile || !['TEACHER_ADMIN', 'SUPER_ADMIN'].includes(callerProfile.role)) {
     return NextResponse.json({ error: 'Not authorized to bulk-import students.' }, { status: 403 });
   }
 

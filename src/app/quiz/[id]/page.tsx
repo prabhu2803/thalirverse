@@ -3,7 +3,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { stepSlide, springSnappy } from '@/lib/motion';
+import { SkeletonBlock } from '@/components/motion/Skeleton';
 
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -111,10 +114,16 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
 
   if (loading || !quiz) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Assessment...</span>
+      <div className="min-h-screen bg-neutral-50 p-6">
+        <div className="max-w-2xl mx-auto space-y-6 pt-10">
+          <SkeletonBlock className="h-3 w-full rounded-full" />
+          <SkeletonBlock className="h-32 w-full rounded-3xl" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SkeletonBlock className="h-20 rounded-2xl" />
+            <SkeletonBlock className="h-20 rounded-2xl" />
+            <SkeletonBlock className="h-20 rounded-2xl" />
+            <SkeletonBlock className="h-20 rounded-2xl" />
+          </div>
         </div>
       </div>
     );
@@ -194,10 +203,11 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
               {qs.map((_: any, i: number) => {
                 const state = dotState(i);
                 return (
-                  <button key={i} onClick={() => goTo(i)}
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm transition-all hover:scale-105 ${DOT_CLASSES[state]}`}>
+                  <motion.button key={i} onClick={() => goTo(i)} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
+                    transition={springSnappy}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm ${DOT_CLASSES[state]}`}>
                     {i + 1}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -251,48 +261,51 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
               </div>
             </div>
 
-            {/* Question card */}
-            {current && (
-              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 mb-6">
-                <span className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold uppercase tracking-wider mb-6">
-                  Multiple Choice
-                </span>
-                <h2 className="text-xl md:text-2xl font-bold text-neutral-800 leading-tight">
-                  {current.question_text}
-                </h2>
-              </div>
-            )}
+            <AnimatePresence mode="wait">
+              {current && (
+                <motion.div key={current.id} initial="enter" animate="center" exit="exit" variants={stepSlide}>
+                  {/* Question card */}
+                  <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 mb-6">
+                    <span className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold uppercase tracking-wider mb-6">
+                      Multiple Choice
+                    </span>
+                    <h2 className="text-xl md:text-2xl font-bold text-neutral-800 leading-tight">
+                      {current.question_text}
+                    </h2>
+                  </div>
 
-            {/* Answer options — 2-column grid */}
-            {current && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                {current.answers?.map((opt: any, idx: number) => {
-                  const letter   = ['A', 'B', 'C', 'D'][idx] ?? String(idx + 1);
-                  const isSel    = selected === opt.id;
-                  return (
-                    <button key={opt.id} onClick={() => select(current.id, opt.id)}
-                      className={`relative flex items-center gap-4 p-6 rounded-2xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
-                        isSel
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-neutral-100 bg-white hover:border-orange-200 hover:bg-orange-50/30'
-                      }`}>
-                      <span className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 transition-colors ${
-                        isSel ? 'bg-orange-600 text-white' : 'bg-neutral-100 text-neutral-500'
-                      }`}>
-                        {letter}
-                      </span>
-                      <span className="text-base font-medium text-neutral-700 leading-snug">
-                        {opt.answer_text ?? opt.text}
-                      </span>
-                      {isSel && (
-                        <span className="ml-auto material-symbols-outlined text-orange-500 text-xl shrink-0"
-                          style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                  {/* Answer options — 2-column grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                    {current.answers?.map((opt: any, idx: number) => {
+                      const letter   = ['A', 'B', 'C', 'D'][idx] ?? String(idx + 1);
+                      const isSel    = selected === opt.id;
+                      return (
+                        <motion.button key={opt.id} onClick={() => select(current.id, opt.id)}
+                          whileTap={{ scale: 0.96 }} transition={springSnappy}
+                          className={`relative flex items-center gap-4 p-6 rounded-2xl border-2 text-left transition-colors duration-200 ${
+                            isSel
+                              ? 'border-orange-500 bg-orange-50'
+                              : 'border-neutral-100 bg-white hover:border-orange-200 hover:bg-orange-50/30'
+                          }`}>
+                          <span className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 transition-colors ${
+                            isSel ? 'bg-orange-600 text-white' : 'bg-neutral-100 text-neutral-500'
+                          }`}>
+                            {letter}
+                          </span>
+                          <span className="text-base font-medium text-neutral-700 leading-snug">
+                            {opt.answer_text ?? opt.text}
+                          </span>
+                          {isSel && (
+                            <span className="ml-auto material-symbols-outlined text-orange-500 text-xl shrink-0"
+                              style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Bottom navigation */}

@@ -3,7 +3,7 @@
 -- students (and admins) log in by name and have no reachable real
 -- email/phone for a standard reset-link flow.
 --
--- Works for ANY role (student, YI_ADMIN, SUPER_ADMIN) — it's keyed
+-- Works for ANY role (student, TEACHER_ADMIN, SUPER_ADMIN) — it's keyed
 -- only on full_name + the answer hash, nothing role-specific.
 -- Run once in Supabase SQL Editor.
 -- =======================================================

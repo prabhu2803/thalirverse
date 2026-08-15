@@ -3,7 +3,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { fadeUp, staggerContainer, springSoft, popIn } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 
@@ -59,6 +62,13 @@ const COURSE_GRADIENTS: Record<string, string> = {
   'leadership':       'bg-gradient-to-br from-green-700 to-green-900',
 };
 
+const COURSE_IMAGES: Record<string, string> = {
+  'road-safety':      '/courses/road-safety.svg',
+  'masoom':           '/courses/masoom.svg',
+  'entrepreneurship': '/courses/entrepreneurship.svg',
+  'leadership':       '/courses/leadership.svg',
+};
+
 /* ─── component ───────────────────────────────────────────────────── */
 
 export default function Dashboard() {
@@ -71,6 +81,7 @@ export default function Dashboard() {
   const [progress, setProgress] = useState<any[]>([]);
   const [quizAttempts, setQuiz] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [selectedBadge, setSelectedBadge] = useState<any>(null);
 
   useEffect(() => {
     (async () => {
@@ -103,6 +114,18 @@ export default function Dashboard() {
     () => modules.map(m => ({ ...m, prog: getModuleProgress(m.id, m.lessons, progress, quizAttempts) })),
     [modules, progress, quizAttempts]
   );
+
+  const getBadgeEarnedDate = (m: any) => {
+    const lessonIds = (m.lessons ?? []).map((l: any) => l.id);
+    const lessonDates = progress
+      .filter(p => lessonIds.includes(p.lesson_id) && p.status === 'COMPLETED' && p.completed_at)
+      .map(p => new Date(p.completed_at).getTime());
+    const quizDates = quizAttempts
+      .filter(a => a.quiz_id === `quiz-${m.id}` && a.passed)
+      .map(a => new Date(a.attempted_at).getTime());
+    const latest = Math.max(0, ...lessonDates, ...quizDates);
+    return latest > 0 ? new Date(latest) : null;
+  };
 
   const completedCount = moduleProgress.filter(m => m.prog.percent === 100).length;
   const totalCount     = modules.length;
@@ -159,14 +182,7 @@ export default function Dashboard() {
   }, []);
 
   if (loading || !student) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading ThalirVerse...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="cards" count={4} />;
   }
 
   const circumference = 2 * Math.PI * 65;
@@ -347,7 +363,7 @@ export default function Dashboard() {
           </section>
 
           {/* Main grid: 8 + 4 */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+          <motion.div className="grid grid-cols-1 xl:grid-cols-12 gap-8" initial="hidden" animate="visible" variants={staggerContainer}>
 
             {/* Left column */}
             <div className="xl:col-span-8 space-y-8">
@@ -356,16 +372,18 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
                 {/* Circular progress */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-neutral-100 flex flex-col items-center justify-center text-center">
+                <motion.div variants={fadeUp} className="bg-white p-8 rounded-2xl shadow-sm border border-neutral-100 flex flex-col items-center justify-center text-center">
                   <h3 className="font-bold font-headline text-lg mb-6 self-start">Course Progress</h3>
                   <div className="relative inline-flex items-center justify-center">
                     <svg className="w-40 h-40">
                       <circle cx="80" cy="80" r="65" fill="transparent" stroke="#f5f5f5" strokeWidth="12" />
-                      <circle cx="80" cy="80" r="65" fill="transparent" stroke="#FF9933"
+                      <motion.circle cx="80" cy="80" r="65" fill="transparent" stroke="#FF9933"
                         strokeDasharray={circumference}
-                        strokeDashoffset={circumference * (1 - overallPercent / 100)}
+                        initial={{ strokeDashoffset: circumference }}
+                        animate={{ strokeDashoffset: circumference * (1 - overallPercent / 100) }}
+                        transition={springSoft}
                         strokeLinecap="round" strokeWidth="12"
-                        style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%', transition: 'stroke-dashoffset 0.7s ease' }} />
+                        style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }} />
                     </svg>
                     <div className="absolute flex flex-col items-center">
                       <span className="text-3xl font-black font-headline">{overallPercent}%</span>
@@ -373,11 +391,14 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <p className="mt-6 text-sm text-neutral-500 font-medium">{completedCount} of {totalCount} modules completed</p>
-                </div>
+                </motion.div>
 
                 {/* Active course */}
                 {activeModule ? (
-                  <div className={`md:col-span-2 relative group overflow-hidden rounded-2xl shadow-lg min-h-[300px] ${COURSE_GRADIENTS[activeModule.id] ?? 'bg-neutral-900'}`}>
+                  <motion.div variants={fadeUp} className={`md:col-span-2 relative group overflow-hidden rounded-2xl shadow-lg min-h-[300px] ${COURSE_GRADIENTS[activeModule.id] ?? 'bg-neutral-900'}`}>
+                    {COURSE_IMAGES[activeModule.id] && (
+                      <img src={COURSE_IMAGES[activeModule.id]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                     <div className="relative h-full flex flex-col justify-end p-8 text-white">
                       <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-md w-max mb-4 tracking-widest">
@@ -411,7 +432,7 @@ export default function Dashboard() {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ) : (
                   <div className="md:col-span-2 bg-white rounded-2xl border border-neutral-100 shadow-sm flex items-center justify-center min-h-[300px]">
                     <div className="text-center text-neutral-400">
@@ -424,7 +445,7 @@ export default function Dashboard() {
               </div>
 
               {/* Enrolled courses */}
-              <section>
+              <motion.section variants={fadeUp}>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-2xl font-black font-headline tracking-tight">Enrolled Courses</h3>
                   <Link href="/profile" className="text-orange-500 font-bold text-sm flex items-center gap-1 hover:underline">
@@ -439,13 +460,13 @@ export default function Dashboard() {
                     <p className="text-xs mt-1">Courses will appear here once published.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-6" variants={staggerContainer}>
                     {moduleProgress.map(m => {
                       const isComplete = m.prog.percent === 100;
                       const hasStarted = m.prog.percent > 0;
                       const icon = isComplete ? 'verified' : (MODULE_ICONS[m.id] ?? 'auto_stories');
                       return (
-                        <div key={m.id} className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-sm hover:shadow-md transition-shadow flex gap-6 items-start">
+                        <motion.div key={m.id} variants={fadeUp} className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-sm hover:shadow-md transition-shadow flex gap-6 items-start">
                           <div className={`w-24 h-24 rounded-2xl flex-shrink-0 flex items-center justify-center ${
                             isComplete ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-500'
                           }`}>
@@ -476,19 +497,19 @@ export default function Dashboard() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })}
-                  </div>
+                  </motion.div>
                 )}
-              </section>
+              </motion.section>
             </div>
 
             {/* Right column */}
             <div className="xl:col-span-4 space-y-8">
 
               {/* Upcoming Deadlines */}
-              <div className="bg-white p-8 rounded-2xl border border-neutral-100 shadow-sm">
+              <motion.div variants={fadeUp} className="bg-white p-8 rounded-2xl border border-neutral-100 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-bold font-headline text-xl flex items-center gap-3">
                     <span className="material-symbols-outlined text-orange-500">calendar_today</span>
@@ -546,10 +567,10 @@ export default function Dashboard() {
                     <p className="text-xs text-neutral-400 mt-2 font-medium">All caught up! No pending tasks.</p>
                   </div>
                 )}
-              </div>
+              </motion.div>
 
               {/* Achievements */}
-              <div className="bg-neutral-100 p-8 rounded-2xl">
+              <motion.div variants={fadeUp} className="bg-neutral-100 p-8 rounded-2xl">
                 <div className="flex justify-between items-center mb-8">
                   <h3 className="font-bold font-headline text-xl flex items-center gap-3">
                     <span className="material-symbols-outlined text-orange-500" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
@@ -565,9 +586,12 @@ export default function Dashboard() {
                     const colors = MODULE_COLORS[m.id] ?? { bg: 'bg-neutral-50', icon: 'text-neutral-400', ring: 'ring-neutral-200' };
                     const icon = MODULE_ICONS[m.id] ?? 'workspace_premium';
                     return (
-                      <div key={m.id}
-                        className={`bg-white p-5 rounded-2xl shadow-sm text-center flex flex-col items-center group cursor-pointer hover:scale-[1.02] transition-transform ${
-                          !earned ? 'opacity-50 grayscale' : ''
+                      <motion.div key={m.id}
+                        whileHover={earned ? { scale: 1.04 } : undefined}
+                        whileTap={earned ? { scale: 0.97 } : undefined}
+                        onClick={() => earned && setSelectedBadge({ module: m, icon, colors, earnedAt: getBadgeEarnedDate(m) })}
+                        className={`bg-white p-5 rounded-2xl shadow-sm text-center flex flex-col items-center group ${
+                          earned ? 'cursor-pointer' : 'opacity-50 grayscale'
                         }`}>
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 ${earned ? colors.bg : 'bg-neutral-100'}`}>
                           <span className={`material-symbols-outlined ${earned ? colors.icon : 'text-neutral-400'}`}
@@ -577,7 +601,7 @@ export default function Dashboard() {
                         </div>
                         <h6 className="text-xs font-black mb-1 leading-tight">{m.badge_title || m.title}</h6>
                         <p className="text-[10px] text-neutral-400">{earned ? 'Earned' : 'Locked'}</p>
-                      </div>
+                      </motion.div>
                     );
                   })}
                   <div className="border-2 border-dashed border-neutral-200 p-5 rounded-2xl text-center flex flex-col items-center justify-center opacity-60">
@@ -585,11 +609,46 @@ export default function Dashboard() {
                     <p className="text-[10px] font-bold text-neutral-500">More to earn</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
         </main>
       </div>
+
+      {/* ── Badge detail modal ── */}
+      <AnimatePresence>
+        {selectedBadge && (
+          <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setSelectedBadge(null)}>
+            <motion.div variants={popIn} initial="hidden" animate="visible" exit="hidden"
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 text-center"
+              onClick={e => e.stopPropagation()}>
+              <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center ring-4 ${selectedBadge.colors.bg} ${selectedBadge.colors.ring}`}>
+                <span className={`material-symbols-outlined ${selectedBadge.colors.icon}`}
+                  style={{ fontSize: 44, fontVariationSettings: "'FILL' 1" }}>
+                  {selectedBadge.icon}
+                </span>
+              </div>
+              <h3 className="font-headline font-black text-xl mt-5">
+                {selectedBadge.module.badge_title || selectedBadge.module.title}
+              </h3>
+              <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
+                {selectedBadge.module.description || `Awarded for completing ${selectedBadge.module.title}.`}
+              </p>
+              {selectedBadge.earnedAt && (
+                <p className="text-xs text-orange-500 font-bold font-label mt-4">
+                  ✓ Earned on {selectedBadge.earnedAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+              )}
+              <button onClick={() => setSelectedBadge(null)}
+                className="w-full mt-6 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-sm transition-all">
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="rs-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFF1E6"/>
+      <stop offset="100%" stop-color="#FFDCC2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#rs-sky)"/>
+
+  <!-- sun -->
+  <circle cx="500" cy="80" r="42" fill="#FFC65C"/>
+
+  <!-- clouds -->
+  <g fill="#FFFFFF" opacity="0.8">
+    <ellipse cx="95" cy="70" rx="42" ry="22"/>
+    <ellipse cx="130" cy="60" rx="30" ry="18"/>
+    <ellipse cx="60" cy="62" rx="26" ry="16"/>
+  </g>
+
+  <!-- road -->
+  <rect x="0" y="255" width="600" height="145" fill="#4B4B58"/>
+  <rect x="0" y="255" width="600" height="10" fill="#3A3A45"/>
+
+  <!-- zebra crossing -->
+  <g fill="#FFFFFF">
+    <rect x="170" y="275" width="26" height="110"/>
+    <rect x="222" y="275" width="26" height="110"/>
+    <rect x="274" y="275" width="26" height="110"/>
+    <rect x="326" y="275" width="26" height="110"/>
+    <rect x="378" y="275" width="26" height="110"/>
+  </g>
+
+  <!-- traffic light pole -->
+  <rect x="500" y="200" width="8" height="100" fill="#2E2E38"/>
+  <rect x="480" y="150" width="48" height="90" rx="10" fill="#2E2E38"/>
+  <circle cx="504" cy="172" r="11" fill="#E5484D"/>
+  <circle cx="504" cy="196" r="11" fill="#FFC65C"/>
+  <circle cx="504" cy="220" r="11" fill="#4CB963"/>
+
+  <!-- child 1 -->
+  <g>
+    <rect x="245" y="215" width="26" height="42" rx="12" fill="#F97316"/>
+    <circle cx="258" cy="200" r="17" fill="#F3C29A"/>
+    <rect x="248" y="257" width="8" height="24" rx="4" fill="#3A3A45"/>
+    <rect x="262" y="257" width="8" height="24" rx="4" fill="#3A3A45"/>
+  </g>
+
+  <!-- child 2 -->
+  <g>
+    <rect x="295" y="215" width="26" height="42" rx="12" fill="#2AA5A0"/>
+    <circle cx="308" cy="200" r="17" fill="#C68B5C"/>
+    <rect x="298" y="257" width="8" height="24" rx="4" fill="#3A3A45"/>
+    <rect x="312" y="257" width="8" height="24" rx="4" fill="#3A3A45"/>
+  </g>
+
+  <!-- joined hands -->
+  <rect x="271" y="232" width="24" height="8" rx="4" fill="#F3C29A"/>
+</svg>

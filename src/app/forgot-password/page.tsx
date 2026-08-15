@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
+import { fadeUp, stepSlide, popIn } from '@/lib/motion';
 
 export default function ForgotPassword() {
   const [step, setStep] = useState<'name' | 'answer' | 'done'>('name');
@@ -67,7 +69,8 @@ export default function ForgotPassword() {
         Back to Login
       </Link>
 
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp}
+        className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10">
         {step !== 'done' && (
           <>
             <h1 className="text-2xl font-headline font-black text-neutral-900 mb-1.5">Reset your password</h1>
@@ -83,8 +86,10 @@ export default function ForgotPassword() {
           <div className="p-3.5 mb-5 text-sm text-red-600 bg-red-50 rounded-xl border border-red-100">{error}</div>
         )}
 
+        <AnimatePresence mode="wait">
         {step === 'name' && (
-          <form onSubmit={handleFindQuestion} className="space-y-5">
+          <motion.form key="name" onSubmit={handleFindQuestion} className="space-y-5"
+            initial="enter" animate="center" exit="exit" variants={stepSlide}>
             <div>
               <label className="block text-sm font-label font-semibold text-neutral-700 mb-2">Full Name</label>
               <input
@@ -100,11 +105,12 @@ export default function ForgotPassword() {
               className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-200 active:scale-[0.98] transition-all disabled:opacity-50">
               {loading ? 'Checking...' : 'Continue'}
             </button>
-          </form>
+          </motion.form>
         )}
 
         {step === 'answer' && (
-          <form onSubmit={handleReset} className="space-y-5">
+          <motion.form key="answer" onSubmit={handleReset} className="space-y-5"
+            initial="enter" animate="center" exit="exit" variants={stepSlide}>
             <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
               <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1">Your Security Question</p>
               <p className="text-sm font-bold text-neutral-800">{question}</p>
@@ -153,14 +159,16 @@ export default function ForgotPassword() {
               className="w-full text-center text-sm font-bold text-neutral-500 hover:text-neutral-700 transition-colors">
               ← Use a different name
             </button>
-          </form>
+          </motion.form>
         )}
 
         {step === 'done' && (
-          <div className="text-center space-y-6">
-            <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto">
+          <motion.div key="done" className="text-center space-y-6"
+            initial="enter" animate="center" exit="exit" variants={stepSlide}>
+            <motion.div initial="hidden" animate="visible" variants={popIn}
+              className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto">
               <span className="material-symbols-outlined text-4xl text-green-500" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-            </div>
+            </motion.div>
             <div>
               <h2 className="text-xl font-headline font-black text-neutral-900">Password reset!</h2>
               <p className="text-sm text-neutral-500 mt-1">You can now log in with your new password.</p>
@@ -169,15 +177,16 @@ export default function ForgotPassword() {
               className="inline-block w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-200 transition-all">
               Go to Login
             </Link>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {step !== 'done' && (
           <p className="mt-8 text-center text-xs text-neutral-400">
             Don&apos;t have a security question set, or forgot the answer too? Ask your Yi coordinator for help.
           </p>
         )}
-      </div>
+      </motion.div>
     </main>
   );
 }

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="ms-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E4F1FE"/>
+      <stop offset="100%" stop-color="#CFE7FC"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#ms-bg)"/>
+
+  <!-- safe circle -->
+  <circle cx="300" cy="215" r="120" fill="none" stroke="#4C8DFF" stroke-width="6" stroke-dasharray="14 12" opacity="0.6"/>
+
+  <!-- shield above -->
+  <path d="M300 55 L326 66 V96 C326 118 314 134 300 142 C286 134 274 118 274 96 V66 Z" fill="#4C8DFF"/>
+  <path d="M291 100 L298 108 L312 90" stroke="#FFFFFF" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- protective adults around the ring -->
+  <g>
+    <rect x="150" y="175" width="34" height="56" rx="16" fill="#2AA5A0"/>
+    <circle cx="167" cy="160" r="21" fill="#E3AE83"/>
+  </g>
+  <g>
+    <rect x="416" y="175" width="34" height="56" rx="16" fill="#9B6BFF"/>
+    <circle cx="433" cy="160" r="21" fill="#F3C29A"/>
+  </g>
+  <g>
+    <rect x="283" y="285" width="34" height="56" rx="16" fill="#F97316"/>
+    <circle cx="300" cy="270" r="21" fill="#C68B5C"/>
+  </g>
+
+  <!-- child, safe in the middle -->
+  <g>
+    <rect x="284" y="205" width="32" height="50" rx="15" fill="#FFB74C"/>
+    <circle cx="300" cy="190" r="19" fill="#F3C29A"/>
+    <circle cx="293" cy="188" r="2.4" fill="#3A3A45"/>
+    <circle cx="307" cy="188" r="2.4" fill="#3A3A45"/>
+    <path d="M292 196 Q300 202 308 196" stroke="#3A3A45" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- small hearts -->
+  <g fill="#FF8FA3">
+    <path d="M225 110 c-6-8-18-4-18 5 c0 8 18 18 18 18 s18-10 18-18 c0-9-12-13-18-5z"/>
+  </g>
+</svg>

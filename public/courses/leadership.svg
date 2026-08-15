@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="ld-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F1E9FF"/>
+      <stop offset="100%" stop-color="#E3D2FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#ld-bg)"/>
+
+  <!-- flag on a pole, behind the group -->
+  <rect x="500" y="90" width="6" height="180" fill="#7A4FE0"/>
+  <path d="M506 96 h60 l-16 20 l16 20 h-60 Z" fill="#F97316"/>
+
+  <!-- sparkle stars -->
+  <g fill="#FFC65C">
+    <path d="M230 70 l6 16 16 6 -16 6 -6 16 -6-16 -16-6 16-6 z"/>
+    <path d="M340 55 l4 11 11 4 -11 4 -4 11 -4-11 -11-4 11-4 z"/>
+  </g>
+
+  <!-- huddle of four figures, hands meeting in the center -->
+  <g>
+    <rect x="150" y="230" width="34" height="58" rx="16" fill="#7A4FE0"/>
+    <circle cx="167" cy="214" r="21" fill="#E3AE83"/>
+  </g>
+  <g>
+    <rect x="230" y="245" width="34" height="70" rx="16" fill="#F97316"/>
+    <circle cx="247" cy="228" r="22" fill="#F3C29A"/>
+  </g>
+  <g>
+    <rect x="336" y="245" width="34" height="70" rx="16" fill="#2AA5A0"/>
+    <circle cx="353" cy="228" r="22" fill="#C68B5C"/>
+  </g>
+  <g>
+    <rect x="416" y="230" width="34" height="58" rx="16" fill="#FF6FA5"/>
+    <circle cx="433" cy="214" r="21" fill="#E3AE83"/>
+  </g>
+
+  <!-- raised arms meeting above the center pair -->
+  <path d="M195 250 Q245 190 262 250" stroke="#F3C29A" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M405 250 Q355 190 338 250" stroke="#C68B5C" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <circle cx="300" cy="205" r="14" fill="#FFD166"/>
+</svg>

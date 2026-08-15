@@ -1,5 +1,5 @@
 -- =======================================================
--- Promotes a student account to YI_ADMIN or SUPER_ADMIN.
+-- Promotes a student account to TEACHER_ADMIN or SUPER_ADMIN.
 --
 -- Do NOT create admin accounts by inserting into auth.users directly —
 -- that bypasses bookkeeping tables (e.g. auth.identities) Supabase's
@@ -13,5 +13,5 @@
 --   2. Run the matching UPDATE below in the Supabase SQL Editor.
 -- =======================================================
 
-UPDATE public.profiles SET role = 'YI_ADMIN'    WHERE full_name = 'Yi Admin (Madurai)';
+UPDATE public.profiles SET role = 'TEACHER_ADMIN' WHERE full_name = 'Yi Admin (Madurai)';
 UPDATE public.profiles SET role = 'SUPER_ADMIN' WHERE full_name = 'Super Admin';

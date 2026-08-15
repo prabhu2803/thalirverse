@@ -3,8 +3,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService, supabase, getRegionFromDistrict } from '@/lib/supabaseClient';
 import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
+import { fadeUp, staggerContainer, popIn } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 
 const NAV_LINKS = [
   { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
@@ -28,6 +31,7 @@ export default function Profile() {
   const [quizAttempts, setQuizAttempts] = useState<any[]>([]);
   const [loading,          setLoading]          = useState(true);
   const [isModalOpen,      setIsModalOpen]      = useState(false);
+  const [selectedBadge,    setSelectedBadge]    = useState<any>(null);
   const [showAllActivity,  setShowAllActivity]  = useState(false);
   const [mobileNavOpen,    setMobileNavOpen]    = useState(false);
   const [lessonMap,        setLessonMap]        = useState<Record<string, { title: string; moduleId: string }>>({});
@@ -91,6 +95,18 @@ export default function Profile() {
     const lessonIds = moduleLessons[m.id] ?? m.lessons?.map((l: any) => l.id) ?? [];
     if (!lessonIds.length) return quizAttempts.some(a => a.quiz_id === `quiz-${m.id}` && a.passed);
     return lessonIds.every((lid: string) => progress.some(p => p.lesson_id === lid && p.status === 'COMPLETED'));
+  };
+
+  const getBadgeEarnedDate = (m: any) => {
+    const lessonIds = moduleLessons[m.id] ?? m.lessons?.map((l: any) => l.id) ?? [];
+    const lessonDates = progress
+      .filter(p => lessonIds.includes(p.lesson_id) && p.status === 'COMPLETED' && p.completed_at)
+      .map(p => new Date(p.completed_at).getTime());
+    const quizDates = quizAttempts
+      .filter(a => a.quiz_id === `quiz-${m.id}` && a.passed)
+      .map(a => new Date(a.attempted_at).getTime());
+    const latest = Math.max(0, ...lessonDates, ...quizDates);
+    return latest > 0 ? new Date(latest) : null;
   };
 
   const completedModules = useMemo(() => modules.filter(m => isModuleComplete(m)), [modules, moduleLessons, progress, quizAttempts]);
@@ -175,14 +191,7 @@ export default function Profile() {
   };
 
   if (loading || !student) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-          <span className="animate-spin text-4xl">⏳</span>
-          <span>Loading Profile...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeleton shape="cards" count={4} />;
   }
 
   const initials = student.fullName.trim().split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -394,7 +403,8 @@ export default function Profile() {
               {modules.length === 0 ? (
                 <p className="text-sm text-neutral-400">No modules available yet.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+                <motion.div className="grid grid-cols-2 sm:grid-cols-4 gap-5"
+                  initial="hidden" animate="visible" variants={staggerContainer}>
                   {modules.map(m => {
                     const earned = isModuleComplete(m);
                     const icon   = BADGE_ICONS[m.id] ?? 'workspace_premium';
@@ -406,10 +416,13 @@ export default function Profile() {
                     };
                     const c = COLORS[m.id] ?? { grad: 'from-orange-400 to-orange-600', ring: 'ring-orange-200' };
                     return (
-                      <div key={m.id}
-                        className={`group flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-center transition-all ${
+                      <motion.div key={m.id} variants={fadeUp}
+                        whileHover={earned ? { y: -4 } : undefined}
+                        whileTap={earned ? { scale: 0.97 } : undefined}
+                        onClick={() => earned && setSelectedBadge({ module: m, icon, colors: c, earnedAt: getBadgeEarnedDate(m) })}
+                        className={`group flex flex-col items-center gap-3 p-5 rounded-2xl border-2 text-center ${
                           earned
-                            ? 'bg-white border-neutral-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-orange-200 cursor-pointer'
+                            ? 'bg-white border-neutral-100 shadow-sm hover:shadow-md hover:border-orange-200 cursor-pointer'
                             : 'bg-neutral-50 border-dashed border-neutral-200 opacity-70'
                         }`}>
                         <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform ${
@@ -431,10 +444,10 @@ export default function Profile() {
                             </div>
                           )}
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
-                </div>
+                </motion.div>
               )}
             </div>
 
@@ -750,6 +763,40 @@ export default function Profile() {
           </div>
         </div>
       )}
+
+      {/* ── Badge detail modal ── */}
+      <AnimatePresence>
+        {selectedBadge && (
+          <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setSelectedBadge(null)}>
+            <motion.div variants={popIn} initial="hidden" animate="visible" exit="hidden"
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 text-center"
+              onClick={e => e.stopPropagation()}>
+              <div className={`w-24 h-24 mx-auto rounded-3xl flex items-center justify-center shadow-lg ring-4 bg-gradient-to-br ${selectedBadge.colors.grad} ${selectedBadge.colors.ring}`}>
+                <span className="material-symbols-outlined text-white text-5xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  {selectedBadge.icon}
+                </span>
+              </div>
+              <h3 className="font-headline font-black text-xl mt-5">
+                {selectedBadge.module.badge_title || selectedBadge.module.title}
+              </h3>
+              <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
+                {selectedBadge.module.description || `Awarded for completing ${selectedBadge.module.title}.`}
+              </p>
+              {selectedBadge.earnedAt && (
+                <p className="text-xs text-orange-500 font-bold font-label mt-4">
+                  ✓ Earned on {selectedBadge.earnedAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+              )}
+              <button onClick={() => setSelectedBadge(null)}
+                className="w-full mt-6 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold rounded-xl text-sm transition-all">
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

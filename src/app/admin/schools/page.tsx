@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { dataService, supabase } from '@/lib/supabaseClient';
+import { scaleIn } from '@/lib/motion';
+import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from '../AdminSidebar';
 
 export default function AdminSchools() {
@@ -17,7 +20,7 @@ export default function AdminSchools() {
   const [chapters, setChapters] = useState<any[]>([]);
   const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
-  // Yi Admin sees only their assigned schools/orgs; null = unscoped (Super Admin)
+  // Teacher Admin sees only their assigned schools/orgs; null = unscoped (Super Admin)
   const [scopedSchoolIds, setScopedSchoolIds] = useState<string[] | null>(null);
 
   // Organization modal
@@ -36,12 +39,12 @@ export default function AdminSchools() {
     async function load() {
       try {
         const admin = await dataService.getActiveStudent();
-        if (!admin || !['YI_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
+        if (!admin || !['TEACHER_ADMIN', 'SUPER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
         setAdminRole(admin.role);
         setAdminName(admin.fullName || 'Admin');
         setAdminId(admin.id);
         let ids: string[] | null = null;
-        if (admin.role === 'YI_ADMIN') {
+        if (admin.role === 'TEACHER_ADMIN') {
           ids = await dataService.getAdminSchoolIds(admin.id);
           setScopedSchoolIds(ids);
         }
@@ -142,9 +145,9 @@ export default function AdminSchools() {
         await dataService.updateSchool(schoolModal.id, fields);
       } else {
         const created = await dataService.createSchool(fields);
-        // Otherwise a Yi Admin's own new school would immediately vanish
+        // Otherwise a Teacher Admin's own new school would immediately vanish
         // from their own scoped view.
-        if (adminRole === 'YI_ADMIN') {
+        if (adminRole === 'TEACHER_ADMIN') {
           await dataService.assignAdminToSchool(adminId, created.id);
           nextScopedIds = scopedSchoolIds ? [...scopedSchoolIds, created.id] : [created.id];
           setScopedSchoolIds(nextScopedIds);
@@ -171,21 +174,14 @@ export default function AdminSchools() {
     }
   };
 
-  if (loading) return (
-    <div className="flex justify-center items-center min-h-screen bg-white">
-      <div className="text-orange-500 font-bold flex flex-col items-center gap-2">
-        <span className="animate-spin text-4xl">⏳</span>
-        <span>Loading Schools...</span>
-      </div>
-    </div>
-  );
+  if (loading) return <PageSkeleton shape="rows" count={5} />;
 
   return (
     <div className="flex overflow-hidden h-screen bg-neutral-50 font-body text-neutral-900">
       <AdminSidebar role={adminRole} adminName={adminName} />
 
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        <main className="px-8 pt-8 pb-12 space-y-8 max-w-6xl">
+        <main className="px-8 pt-8 pb-12 space-y-8 w-full">
           <section>
             <h1 className="text-3xl font-black font-headline tracking-tight">Schools & Organizations</h1>
             <p className="text-neutral-500 text-sm mt-1">
@@ -311,9 +307,12 @@ export default function AdminSchools() {
       </div>
 
       {/* ── Organization modal ── */}
+      <AnimatePresence>
       {orgModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl border border-slate-100">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl border border-slate-100">
             <h3 className="font-headline font-black text-lg mb-5">{orgModal.id ? 'Rename' : 'New'} Organization</h3>
             {formError && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 rounded-xl border border-red-100 font-bold">{formError}</div>}
             <input autoFocus value={orgModal.name} onChange={e => setOrgModal({ ...orgModal, name: e.target.value })}
@@ -325,14 +324,18 @@ export default function AdminSchools() {
                 {orgSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Organization delete confirm ── */}
+      <AnimatePresence>
       {orgDeleteTarget && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                 <span className="material-symbols-outlined text-3xl text-red-500">domain_disabled</span>
@@ -348,14 +351,18 @@ export default function AdminSchools() {
                 <button onClick={handleDeleteOrg} className="w-1/2 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-all">Delete</button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── School modal ── */}
+      <AnimatePresence>
       {schoolModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-7 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-7 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <h3 className="font-headline font-black text-lg mb-5">{schoolModal.id ? 'Edit' : 'New'} School</h3>
             {formError && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 rounded-xl border border-red-100 font-bold">{formError}</div>}
             <div className="space-y-4">
@@ -408,14 +415,18 @@ export default function AdminSchools() {
                 {schoolSaving ? 'Saving...' : 'Save School'}
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── School delete confirm ── */}
+      <AnimatePresence>
       {schoolDeleteTarget && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div variants={scaleIn} initial="hidden" animate="visible" exit="hidden"
+            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                 <span className="material-symbols-outlined text-3xl text-red-500">delete_forever</span>
@@ -434,9 +445,10 @@ export default function AdminSchools() {
                 <button onClick={handleDeleteSchool} className="w-1/2 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-all">Delete</button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { dataService, supabase } from '@/lib/supabaseClient';
+import { fadeUp } from '@/lib/motion';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -95,7 +97,7 @@ export default function LoginPage() {
 
       {/* ── Right Panel ────────────────────────────────────────────── */}
       <div className="flex-1 bg-white flex flex-col justify-center px-8 py-14 lg:px-20">
-        <div className="w-full max-w-sm mx-auto">
+        <motion.div initial="hidden" animate="visible" variants={fadeUp} className="w-full max-w-sm mx-auto">
 
           <h2 className="text-3xl font-headline font-black text-neutral-900 mb-1.5">Welcome back</h2>
           <p className="text-sm text-neutral-500 mb-8">Please enter your details to sign in.</p>
@@ -181,7 +183,7 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-        </div>
+        </motion.div>
       </div>
     </main>
   );

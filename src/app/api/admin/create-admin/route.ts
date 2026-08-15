@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const fullName = (body.fullName || '').trim();
   const password = body.password || '';
-  const role = body.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'YI_ADMIN';
+  const role = body.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'TEACHER_ADMIN';
   const schoolIds = Array.isArray(body.schoolIds) ? body.schoolIds : [];
 
   if (!fullName) {
