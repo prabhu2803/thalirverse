@@ -7,73 +7,38 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { fadeUp, staggerContainer, springSoft, popIn } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
+import JourneyRoadmap from '@/components/dashboard/JourneyRoadmap';
+import ClassProgressPanel from '@/components/dashboard/ClassProgressPanel';
+import CelebrationRocket from '@/components/motion/CelebrationRocket';
+import OnboardingModal from '@/components/dashboard/OnboardingModal';
+import {
+  computeStreak, getModuleProgress, getBadgeEarnedDate as getBadgeEarnedDateShared,
+  moduleTheme, hasCompletedToday, isStreakBroken,
+  getOverallCompletionPct, MILESTONE_TIERS, MILESTONE_LABELS, getNextMilestone,
+} from '@/lib/gamification';
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 
-function computeStreak(progress: any[]): number {
-  const dates = new Set(
-    progress.filter(p => p.completed_at).map(p => new Date(p.completed_at).toISOString().split('T')[0])
-  );
-  let streak = 0;
-  const today = new Date();
-  for (let i = 0; i <= 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    if (dates.has(d.toISOString().split('T')[0])) { streak++; }
-    else if (i > 0) break;
-  }
-  return streak;
-}
-
-function getModuleProgress(moduleId: string, lessons: any[], progress: any[], quizAttempts: any[]) {
-  if (!lessons?.length) {
-    const passed = quizAttempts.some(a => a.quiz_id === `quiz-${moduleId}` && a.passed);
-    return { percent: passed ? 100 : 0, completed: 0, total: 0 };
-  }
-  const ids = lessons.map((l: any) => l.id);
-  const done = progress.filter(p => ids.includes(p.lesson_id) && p.status === 'COMPLETED').length;
-  return { percent: Math.round((done / lessons.length) * 100), completed: done, total: lessons.length };
-}
-
 const NAV_LINKS = [
-  { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
-  { label: 'Explore',      href: '/explore',   icon: 'search' },
-  { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'My Learning',  href: '/dashboard',   icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',     icon: 'search' },
+  { label: 'Achievements', href: '/profile',     icon: 'military_tech' },
+  { label: 'Leaderboard',  href: '/leaderboard', icon: 'leaderboard' },
 ];
-
-const MODULE_ICONS: Record<string, string> = {
-  'road-safety': 'local_police',
-  'masoom': 'shield',
-  'entrepreneurship': 'rocket_launch',
-  'leadership': 'stars',
-};
-
-const MODULE_COLORS: Record<string, { bg: string; icon: string; ring: string }> = {
-  'road-safety':     { bg: 'bg-yellow-50', icon: 'text-yellow-600', ring: 'ring-yellow-200' },
-  'masoom':          { bg: 'bg-blue-50',   icon: 'text-blue-600',   ring: 'ring-blue-200' },
-  'entrepreneurship':{ bg: 'bg-purple-50', icon: 'text-purple-600', ring: 'ring-purple-200' },
-  'leadership':      { bg: 'bg-green-50',  icon: 'text-green-600',  ring: 'ring-green-200' },
-};
-
-const COURSE_GRADIENTS: Record<string, string> = {
-  'road-safety':      'bg-gradient-to-br from-amber-700 to-amber-900',
-  'masoom':           'bg-gradient-to-br from-blue-700 to-blue-900',
-  'entrepreneurship': 'bg-gradient-to-br from-purple-700 to-purple-900',
-  'leadership':       'bg-gradient-to-br from-green-700 to-green-900',
-};
-
-const COURSE_IMAGES: Record<string, string> = {
-  'road-safety':      '/courses/road-safety.svg',
-  'masoom':           '/courses/masoom.svg',
-  'entrepreneurship': '/courses/entrepreneurship.svg',
-  'leadership':       '/courses/leadership.svg',
-};
 
 /* ─── component ───────────────────────────────────────────────────── */
 
 export default function Dashboard() {
   const router   = useRouter();
   const pathname = usePathname();
+  const [showLockedNotice, setShowLockedNotice] = useState(false);
+
+  // Reads the query param client-side (no useSearchParams/Suspense needed —
+  // this banner is a purely client-side courtesy, never part of SSR output).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setShowLockedNotice(new URLSearchParams(window.location.search).has('locked'));
+  }, []);
   const [showNotif,  setShowNotif]  = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const [student, setStudent]   = useState<any>(null);
@@ -82,6 +47,9 @@ export default function Dashboard() {
   const [quizAttempts, setQuiz] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
   const [selectedBadge, setSelectedBadge] = useState<any>(null);
+  const [streakBrokenModal, setStreakBrokenModal] = useState<number | null>(null);
+  const [timeLeftLabel, setTimeLeftLabel] = useState('');
+  const [celebratingMilestone, setCelebratingMilestone] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -103,7 +71,39 @@ export default function Dashboard() {
   }, []);
 
   const streak  = useMemo(() => computeStreak(progress), [progress]);
+  const streakDanger = streak > 0 && !hasCompletedToday(progress);
   const xp      = student?.xp ?? 0;
+
+  // Danger-pill countdown: hours/minutes left before the streak lapses at
+  // midnight local time. Ticks once a minute — a full-second timer would be
+  // needless churn for a display this coarse.
+  useEffect(() => {
+    if (!streakDanger) return;
+    const tick = () => {
+      const now = new Date();
+      const midnight = new Date(now); midnight.setHours(24, 0, 0, 0);
+      const msLeft = midnight.getTime() - now.getTime();
+      const h = Math.floor(msLeft / 3600000);
+      const m = Math.floor((msLeft % 3600000) / 60000);
+      setTimeLeftLabel(h > 0 ? `${h}h ${m}m left` : `${m}m left`);
+    };
+    tick();
+    const int = setInterval(tick, 60000);
+    return () => clearInterval(int);
+  }, [streakDanger]);
+
+  // Streak-broken moment: shown once per break event via a localStorage flag
+  // keyed to that break's own last-active date, so a *new* break always
+  // surfaces fresh even if a past one was already dismissed.
+  useEffect(() => {
+    if (!student || loading) return;
+    const { broken, lastDate, lostStreakSize } = isStreakBroken(progress);
+    if (!broken || lostStreakSize === 0 || !lastDate) return;
+    const key = `tv_streak_break_seen_${student.id}_${lastDate.toISOString().split('T')[0]}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    setStreakBrokenModal(lostStreakSize);
+  }, [student, loading, progress]);
   const initials = useMemo(() => {
     if (!student?.fullName) return '?';
     const parts = student.fullName.trim().split(' ');
@@ -111,25 +111,35 @@ export default function Dashboard() {
   }, [student]);
 
   const moduleProgress = useMemo(
-    () => modules.map(m => ({ ...m, prog: getModuleProgress(m.id, m.lessons, progress, quizAttempts) })),
+    () => modules.map(m => ({ ...m, prog: getModuleProgress(m, progress, quizAttempts) })),
     [modules, progress, quizAttempts]
   );
 
-  const getBadgeEarnedDate = (m: any) => {
-    const lessonIds = (m.lessons ?? []).map((l: any) => l.id);
-    const lessonDates = progress
-      .filter(p => lessonIds.includes(p.lesson_id) && p.status === 'COMPLETED' && p.completed_at)
-      .map(p => new Date(p.completed_at).getTime());
-    const quizDates = quizAttempts
-      .filter(a => a.quiz_id === `quiz-${m.id}` && a.passed)
-      .map(a => new Date(a.attempted_at).getTime());
-    const latest = Math.max(0, ...lessonDates, ...quizDates);
-    return latest > 0 ? new Date(latest) : null;
-  };
+  const getBadgeEarnedDate = (m: any) => getBadgeEarnedDateShared(m, progress, quizAttempts);
 
   const completedCount = moduleProgress.filter(m => m.prog.percent === 100).length;
   const totalCount     = modules.length;
-  const overallPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const overallPercent = getOverallCompletionPct(modules, progress, quizAttempts);
+
+  // Biggest celebration in the app — fires once per milestone tier crossed,
+  // gated server-side by profiles.highest_milestone_celebrated so it can
+  // never re-fire on a later visit (or from another device).
+  useEffect(() => {
+    if (!student || loading || totalCount === 0) return;
+    const highest = student.highestMilestoneCelebrated ?? 0;
+    const crossed = MILESTONE_TIERS.filter(t => overallPercent >= t && t > highest);
+    if (crossed.length > 0) setCelebratingMilestone(Math.max(...crossed));
+  }, [student, loading, overallPercent, totalCount]);
+
+  const handleMilestoneCelebrationDone = () => {
+    if (celebratingMilestone && student) {
+      dataService.markMilestoneCelebrated(student.id, celebratingMilestone);
+      setStudent((s: any) => ({ ...s, highestMilestoneCelebrated: celebratingMilestone }));
+    }
+    setCelebratingMilestone(null);
+  };
+
+  const nextMilestone = useMemo(() => getNextMilestone(modules, progress, quizAttempts), [modules, progress, quizAttempts]);
 
   const activeModule = moduleProgress.find(m => m.prog.percent > 0 && m.prog.percent < 100) ?? moduleProgress[0];
 
@@ -203,6 +213,7 @@ export default function Dashboard() {
                 link.label === 'My Learning'  ? pathname === '/dashboard' :
                 link.label === 'Explore'      ? pathname.startsWith('/explore') :
                 link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
                 false;
               if ((link as any).disabled) {
                 return (
@@ -324,6 +335,24 @@ export default function Dashboard() {
         {/* Content */}
         <main className="p-8 max-w-[1600px] mx-auto w-full space-y-8">
 
+          {/* Locked-module notice */}
+          <AnimatePresence>
+            {showLockedNotice && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5">
+                  <span className="material-symbols-outlined text-amber-600">lock</span>
+                  <p className="text-sm text-amber-800 flex-1">
+                    Finish your current module first — that one's still locked until you catch up on your journey below.
+                  </p>
+                  <button onClick={() => setShowLockedNotice(false)} className="text-amber-500 hover:text-amber-700 shrink-0">
+                    <span className="material-symbols-outlined text-lg">close</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Welcome */}
           <section className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
@@ -337,21 +366,39 @@ export default function Dashboard() {
                 <h1 className="text-3xl font-black font-headline tracking-tight">
                   Welcome back, {student.fullName.split(' ')[0]}!
                 </h1>
-                <p className="text-neutral-500 mt-0.5">
-                  {streak > 0
-                    ? `You're on a ${streak}-day learning streak. Keep it up!`
-                    : 'Start a lesson today to build your streak!'}
+                <p className={`mt-0.5 ${streakDanger ? 'text-red-500 font-bold' : 'text-neutral-500'}`}>
+                  {streakDanger
+                    ? `Your ${streak}-day streak ends tonight — keep it alive!`
+                    : streak > 0
+                      ? `You're on a ${streak}-day learning streak. Keep it up!`
+                      : 'Start a lesson today to build your streak!'}
                 </p>
+                {nextMilestone && (
+                  <p className="text-xs font-bold text-orange-500 mt-1 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">flag</span>
+                    {nextMilestone.lessonsRemaining > 0
+                      ? `${nextMilestone.lessonsRemaining} lesson${nextMilestone.lessonsRemaining !== 1 ? 's' : ''} to unlock your ${nextMilestone.badgeTitle} badge (+${nextMilestone.tier - overallPercent}% overall)`
+                      : `Pass the ${nextMilestone.badgeTitle} quiz to unlock your badge (+${nextMilestone.tier - overallPercent}% overall)`}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-4 shrink-0">
-              <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-neutral-100">
-                <span className="material-symbols-outlined text-orange-500" style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
+              <motion.div
+                animate={streakDanger ? { boxShadow: ['0 0 0 0 rgba(239,68,68,0.35)', '0 0 0 8px rgba(239,68,68,0)'] } : {}}
+                transition={streakDanger ? { duration: 1.6, repeat: Infinity, ease: 'easeOut' } : {}}
+                className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-sm border ${
+                  streakDanger ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-100'
+                }`}>
+                <span className={`material-symbols-outlined ${streakDanger ? 'text-red-500' : 'text-orange-500'}`}
+                  style={{ fontVariationSettings: "'FILL' 1" }}>local_fire_department</span>
                 <div>
-                  <p className="text-xs text-neutral-400 font-bold uppercase tracking-wider">Streak</p>
-                  <p className="font-black text-lg leading-tight">{streak > 0 ? `${streak} Days` : '—'}</p>
+                  <p className={`text-xs font-bold uppercase tracking-wider ${streakDanger ? 'text-red-400' : 'text-neutral-400'}`}>
+                    {streakDanger ? timeLeftLabel || 'Streak' : 'Streak'}
+                  </p>
+                  <p className={`font-black text-lg leading-tight ${streakDanger ? 'text-red-600' : ''}`}>{streak > 0 ? `${streak} Days` : '—'}</p>
                 </div>
-              </div>
+              </motion.div>
               <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-neutral-100">
                 <span className="material-symbols-outlined text-blue-500" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
                 <div>
@@ -395,9 +442,9 @@ export default function Dashboard() {
 
                 {/* Active course */}
                 {activeModule ? (
-                  <motion.div variants={fadeUp} className={`md:col-span-2 relative group overflow-hidden rounded-2xl shadow-lg min-h-[300px] ${COURSE_GRADIENTS[activeModule.id] ?? 'bg-neutral-900'}`}>
-                    {COURSE_IMAGES[activeModule.id] && (
-                      <img src={COURSE_IMAGES[activeModule.id]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <motion.div variants={fadeUp} className={`md:col-span-2 relative group overflow-hidden rounded-2xl shadow-lg min-h-[300px] bg-gradient-to-br ${moduleTheme(activeModule.id).strong.from} ${moduleTheme(activeModule.id).strong.to}`}>
+                    {moduleTheme(activeModule.id).image && (
+                      <img src={moduleTheme(activeModule.id).image} alt="" className="absolute inset-0 w-full h-full object-cover" />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                     <div className="relative h-full flex flex-col justify-end p-8 text-white">
@@ -444,69 +491,17 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Enrolled courses */}
+              {/* Journey roadmap */}
               <motion.section variants={fadeUp}>
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-black font-headline tracking-tight">Enrolled Courses</h3>
-                  <Link href="/profile" className="text-orange-500 font-bold text-sm flex items-center gap-1 hover:underline">
-                    View All <span className="material-symbols-outlined">chevron_right</span>
-                  </Link>
-                </div>
-
-                {moduleProgress.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-neutral-100 shadow-sm text-neutral-400">
-                    <span className="material-symbols-outlined text-4xl mb-3">auto_stories</span>
-                    <p className="text-sm font-bold">No courses yet</p>
-                    <p className="text-xs mt-1">Courses will appear here once published.</p>
-                  </div>
-                ) : (
-                  <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-6" variants={staggerContainer}>
-                    {moduleProgress.map(m => {
-                      const isComplete = m.prog.percent === 100;
-                      const hasStarted = m.prog.percent > 0;
-                      const icon = isComplete ? 'verified' : (MODULE_ICONS[m.id] ?? 'auto_stories');
-                      return (
-                        <motion.div key={m.id} variants={fadeUp} className="bg-white p-6 rounded-2xl border border-neutral-100 shadow-sm hover:shadow-md transition-shadow flex gap-6 items-start">
-                          <div className={`w-24 h-24 rounded-2xl flex-shrink-0 flex items-center justify-center ${
-                            isComplete ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-500'
-                          }`}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 48, fontVariationSettings: "'FILL' 1" }}>{icon}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="min-w-0">
-                                <h4 className="font-bold font-headline text-lg mb-1 truncate">{m.title}</h4>
-                                <p className="text-sm text-neutral-500 mb-4 line-clamp-1">{m.description}</p>
-                              </div>
-                              <button className="text-neutral-400 hover:text-neutral-600 shrink-0">
-                                <span className="material-symbols-outlined">more_vert</span>
-                              </button>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
-                                isComplete  ? 'text-green-600 bg-green-50' :
-                                hasStarted  ? 'text-orange-500 bg-orange-50' :
-                                              'text-neutral-400 bg-neutral-100'
-                              }`}>
-                                {isComplete ? 'Completed' : hasStarted ? `${m.prog.percent}% Done` : 'Pending'}
-                              </span>
-                              {isComplete && (
-                                <Link href="/profile" className="text-sm font-bold text-orange-500 hover:underline">
-                                  View Certificate
-                                </Link>
-                              )}
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </motion.div>
-                )}
+                <JourneyRoadmap modules={modules} progress={progress} quizAttempts={quizAttempts} />
               </motion.section>
             </div>
 
             {/* Right column */}
             <div className="xl:col-span-4 space-y-8">
+
+              {/* Class Progress — collective, non-comparative */}
+              <ClassProgressPanel student={{ school: student.school, standard: student.standard }} />
 
               {/* Upcoming Deadlines */}
               <motion.div variants={fadeUp} className="bg-white p-8 rounded-2xl border border-neutral-100 shadow-sm">
@@ -581,10 +576,10 @@ export default function Dashboard() {
                   </Link>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {moduleProgress.slice(0, 3).map(m => {
+                  {moduleProgress.slice(0, 4).map(m => {
                     const earned = m.prog.percent === 100;
-                    const colors = MODULE_COLORS[m.id] ?? { bg: 'bg-neutral-50', icon: 'text-neutral-400', ring: 'ring-neutral-200' };
-                    const icon = MODULE_ICONS[m.id] ?? 'workspace_premium';
+                    const colors = moduleTheme(m.id).soft;
+                    const icon = moduleTheme(m.id).icon;
                     return (
                       <motion.div key={m.id}
                         whileHover={earned ? { scale: 1.04 } : undefined}
@@ -604,10 +599,12 @@ export default function Dashboard() {
                       </motion.div>
                     );
                   })}
-                  <div className="border-2 border-dashed border-neutral-200 p-5 rounded-2xl text-center flex flex-col items-center justify-center opacity-60">
-                    <span className="material-symbols-outlined text-neutral-400 mb-2 text-2xl">lock</span>
-                    <p className="text-[10px] font-bold text-neutral-500">More to earn</p>
-                  </div>
+                  {moduleProgress.length < 4 && (
+                    <div className="border-2 border-dashed border-neutral-200 p-5 rounded-2xl text-center flex flex-col items-center justify-center opacity-60">
+                      <span className="material-symbols-outlined text-neutral-400 mb-2 text-2xl">lock</span>
+                      <p className="text-[10px] font-bold text-neutral-500">More to earn</p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -649,6 +646,57 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Streak-broken modal (shown once per break event) ── */}
+      <AnimatePresence>
+        {streakBrokenModal !== null && (
+          <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setStreakBrokenModal(null)}>
+            <motion.div variants={popIn} initial="hidden" animate="visible" exit="hidden"
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 text-center"
+              onClick={e => e.stopPropagation()}>
+              <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+                {[...Array(6)].map((_, i) => (
+                  <motion.span key={i}
+                    className="absolute w-2 h-2 rounded-full bg-neutral-300"
+                    initial={{ opacity: 0.8, x: 0, y: 0, scale: 1 }}
+                    animate={{
+                      opacity: 0,
+                      x: Math.cos((i / 6) * Math.PI * 2) * 40,
+                      y: Math.sin((i / 6) * Math.PI * 2) * 40,
+                      scale: 0.3,
+                    }}
+                    transition={{ duration: 1.2, delay: 0.2, ease: 'easeOut' }} />
+                ))}
+                <motion.span className="material-symbols-outlined text-neutral-300 relative"
+                  style={{ fontSize: 44, fontVariationSettings: "'FILL' 1" }}
+                  initial={{ scale: 1.3 }} animate={{ scale: 0.85 }} transition={{ duration: 0.8, ease: 'easeOut' }}>
+                  local_fire_department
+                </motion.span>
+              </div>
+              <h3 className="font-headline font-black text-xl mt-5 text-neutral-800">Streak Lost</h3>
+              <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
+                Your {streakBrokenModal}-day streak ended — but every learner has an off day.
+                Start a lesson today to begin a new one!
+              </p>
+              <button onClick={() => { setStreakBrokenModal(null); router.push('/explore'); }}
+                className="w-full mt-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm transition-all">
+                Start Today's Lesson
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <CelebrationRocket
+        show={celebratingMilestone !== null}
+        onDone={handleMilestoneCelebrationDone}
+        tier={celebratingMilestone ?? 0}
+        label={celebratingMilestone ? MILESTONE_LABELS[celebratingMilestone] : ''}
+      />
+
+      <OnboardingModal />
     </div>
   );
 }

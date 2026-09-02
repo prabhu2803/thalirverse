@@ -261,11 +261,11 @@ export default function AdminTeam() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => openEdit(a)} title="Edit school assignments"
+                            <button onClick={() => openEdit(a)} title="Edit school assignments" aria-label="Edit school assignments"
                               className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all">
                               <span className="material-symbols-outlined text-lg">edit_location_alt</span>
                             </button>
-                            <button onClick={() => openRoleModal(a)} title="Change role"
+                            <button onClick={() => openRoleModal(a)} title="Change role" aria-label="Change role"
                               className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all">
                               <span className="material-symbols-outlined text-lg">swap_horiz</span>
                             </button>

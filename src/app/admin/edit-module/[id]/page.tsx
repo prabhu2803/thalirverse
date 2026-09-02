@@ -2,12 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { fadeUp } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
 
 const ALPHA = ['A', 'B', 'C', 'D'];
+
+const FILE_ACCEPT: Record<'PDF' | 'PRESENTATION', string> = {
+  PDF: '.pdf,application/pdf',
+  PRESENTATION: '.ppt,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint',
+};
 
 function makeQuestion(moduleId: string, order: number) {
   const qId = `q-${moduleId}-${Date.now()}-${order}`;
@@ -24,6 +30,7 @@ function makeQuestion(moduleId: string, order: number) {
 
 export default function AdminEditModule({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
+  const router = useRouter();
 
   // Module details
   const [title, setTitle] = useState('');
@@ -35,8 +42,12 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
   const [skipLessons, setSkipLessons] = useState(false);
   const [newLessonTitle, setNewLessonTitle] = useState('');
   const [newLessonUrl, setNewLessonUrl] = useState('');
+  const [newLessonType, setNewLessonType] = useState<'VIDEO' | 'PDF' | 'PRESENTATION'>('VIDEO');
+  const [newLessonFile, setNewLessonFile] = useState<File | null>(null);
   const [addingLesson, setAddingLesson] = useState(false);
   const [addLessonError, setAddLessonError] = useState('');
+  // Per-row "replace file" upload for an already-saved PDF/PRESENTATION lesson.
+  const [replacingLessonId, setReplacingLessonId] = useState<string | null>(null);
 
   // Quiz
   const [includeQuiz, setIncludeQuiz] = useState(false);
@@ -54,6 +65,11 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     async function load() {
       try {
+        // Course Builder is Super Admin only — was previously unguarded, so
+        // any logged-in role could open this editor directly by URL.
+        const admin = await dataService.getActiveStudent();
+        if (!admin || admin.role !== 'SUPER_ADMIN') { router.push('/login'); return; }
+
         const item = await dataService.getModule(id);
         if (!item) return;
         setTitle(item.title || '');
@@ -96,18 +112,36 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
     setLessons(prev => prev.map(l => l.id === lessonId ? { ...l, [field]: value } : l));
 
   const handleAddLesson = async () => {
-    if (!newLessonTitle.trim() || !newLessonUrl.trim()) return;
+    if (!newLessonTitle.trim()) return;
+    if (newLessonType === 'VIDEO' ? !newLessonUrl.trim() : !newLessonFile) return;
     setAddingLesson(true);
     setAddLessonError('');
     try {
-      const added = await dataService.addLesson(id, newLessonTitle.trim(), newLessonUrl.trim(), lessons.length);
+      const contentUrl = newLessonType === 'VIDEO'
+        ? newLessonUrl.trim()
+        : await dataService.uploadLessonFile(newLessonFile as File, id);
+      const added = await dataService.addLesson(id, newLessonTitle.trim(), contentUrl, lessons.length, newLessonType);
       setLessons(prev => [...prev, added]);
       setNewLessonTitle('');
       setNewLessonUrl('');
+      setNewLessonFile(null);
     } catch (err: any) {
       setAddLessonError(err?.message || 'Failed to add lesson.');
     } finally {
       setAddingLesson(false);
+    }
+  };
+
+  const handleReplaceLessonFile = async (lessonId: string, file: File) => {
+    setReplacingLessonId(lessonId);
+    setAddLessonError('');
+    try {
+      const url = await dataService.uploadLessonFile(file, id);
+      handleLessonChange(lessonId, 'content_url', url);
+    } catch (err: any) {
+      setAddLessonError(err?.message || 'Failed to upload replacement file.');
+    } finally {
+      setReplacingLessonId(null);
     }
   };
 
@@ -148,12 +182,18 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
       let currentLessons = lessons;
 
       // Flush pending lesson form
-      if (!skipLessons && newLessonTitle.trim() && newLessonUrl.trim()) {
-        const added = await dataService.addLesson(id, newLessonTitle.trim(), newLessonUrl.trim(), currentLessons.length);
+      const hasPendingLesson = !skipLessons && newLessonTitle.trim() &&
+        (newLessonType === 'VIDEO' ? newLessonUrl.trim() : newLessonFile);
+      if (hasPendingLesson) {
+        const contentUrl = newLessonType === 'VIDEO'
+          ? newLessonUrl.trim()
+          : await dataService.uploadLessonFile(newLessonFile as File, id);
+        const added = await dataService.addLesson(id, newLessonTitle.trim(), contentUrl, currentLessons.length, newLessonType);
         currentLessons = [...currentLessons, added];
         setLessons(currentLessons);
         setNewLessonTitle('');
         setNewLessonUrl('');
+        setNewLessonFile(null);
       }
 
       await dataService.updateModule(id, { title, description, category });
@@ -246,12 +286,19 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
                 {lessons.length === 0 && (
                   <p className="text-sm text-neutral-400 text-center py-4">No lessons yet. Add one below.</p>
                 )}
-                {lessons.map((lesson, idx) => (
+                {lessons.map((lesson, idx) => {
+                  const lType = lesson.lesson_type || 'VIDEO';
+                  return (
                   <div key={lesson.id} className="p-4 border border-slate-100 bg-slate-50/50 rounded-2xl space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="bg-orange-500/10 text-orange-600 text-xs font-bold font-mono px-2.5 py-1 rounded-full">
-                        Lesson {(idx + 1).toString().padStart(2, '0')}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-orange-500/10 text-orange-600 text-xs font-bold font-mono px-2.5 py-1 rounded-full">
+                          Lesson {(idx + 1).toString().padStart(2, '0')}
+                        </span>
+                        <span className="bg-neutral-200 text-neutral-500 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full">
+                          {lType === 'VIDEO' ? 'Video' : lType === 'PDF' ? 'PDF' : 'Presentation'}
+                        </span>
+                      </div>
                       <button type="button" onClick={() => handleDeleteLesson(lesson.id)}
                         className="text-neutral-300 hover:text-red-500 transition-colors p-1">
                         <span className="material-symbols-outlined text-lg">delete</span>
@@ -260,26 +307,55 @@ export default function AdminEditModule({ params }: { params: Promise<{ id: stri
                     <input type="text" value={lesson.title} onChange={e => handleLessonChange(lesson.id, 'title', e.target.value)}
                       placeholder="Lesson title"
                       className="w-full px-4 py-2.5 bg-white border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
-                    <input type="url" value={lesson.content_url} onChange={e => handleLessonChange(lesson.id, 'content_url', e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      className="w-full px-4 py-2.5 bg-white border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                    {lType === 'VIDEO' ? (
+                      <input type="url" value={lesson.content_url} onChange={e => handleLessonChange(lesson.id, 'content_url', e.target.value)}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        className="w-full px-4 py-2.5 bg-white border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <a href={lesson.content_url} target="_blank" rel="noreferrer"
+                          className="text-xs font-bold text-orange-500 hover:text-orange-600 underline truncate flex-1">
+                          Current file
+                        </a>
+                        <label className="shrink-0 text-xs font-bold text-neutral-500 hover:text-orange-500 cursor-pointer">
+                          <input type="file" accept={FILE_ACCEPT[lType as 'PDF' | 'PRESENTATION']} className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleReplaceLessonFile(lesson.id, f); }} />
+                          {replacingLessonId === lesson.id ? 'Uploading...' : 'Replace file'}
+                        </label>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Add lesson */}
                 <div className="border-t border-neutral-100 pt-4 space-y-3">
                   <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Add New Lesson</p>
+                  <div className="flex gap-2">
+                    {(['VIDEO', 'PDF', 'PRESENTATION'] as const).map(t => (
+                      <button key={t} type="button" onClick={() => { setNewLessonType(t); setNewLessonFile(null); setNewLessonUrl(''); }}
+                        className={`flex-1 text-xs font-bold py-2 rounded-xl transition-all ${newLessonType === t ? 'bg-orange-500 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
+                        {t === 'VIDEO' ? 'Video' : t === 'PDF' ? 'PDF' : 'Presentation'}
+                      </button>
+                    ))}
+                  </div>
                   <input type="text" value={newLessonTitle} onChange={e => setNewLessonTitle(e.target.value)}
                     placeholder="Lesson title"
                     className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
-                  <input type="url" value={newLessonUrl} onChange={e => setNewLessonUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                  {newLessonType === 'VIDEO' ? (
+                    <input key="url-input" type="url" value={newLessonUrl} onChange={e => setNewLessonUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                  ) : (
+                    <input key="file-input" type="file" accept={FILE_ACCEPT[newLessonType]}
+                      onChange={e => setNewLessonFile(e.target.files?.[0] ?? null)}
+                      className="w-full text-sm text-neutral-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold file:text-sm hover:file:bg-orange-100 cursor-pointer" />
+                  )}
                   {addLessonError && (
                     <div className="p-3 text-xs text-red-600 bg-red-50 rounded-xl border border-red-100 font-bold">{addLessonError}</div>
                   )}
                   <button type="button" onClick={handleAddLesson}
-                    disabled={addingLesson || !newLessonTitle.trim() || !newLessonUrl.trim()}
+                    disabled={addingLesson || !newLessonTitle.trim() || (newLessonType === 'VIDEO' ? !newLessonUrl.trim() : !newLessonFile)}
                     className="w-full py-2.5 border-2 border-dashed border-orange-300 hover:border-orange-500 text-orange-500 font-bold text-sm rounded-xl transition-all disabled:opacity-40 flex items-center justify-center gap-2">
                     <span className="material-symbols-outlined text-sm">add</span>
                     {addingLesson ? 'Adding...' : 'Add Lesson'}

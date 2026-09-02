@@ -9,6 +9,7 @@ import { parseCsv, downloadCsv } from '@/lib/csv';
 import { scaleIn } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from './AdminSidebar';
+import { isGraduate as isGraduateShared, resolveQuizId } from '@/lib/gamification';
 
 const BULK_TEMPLATE_HEADERS = ['Full Name', 'School', 'Standard', 'Section', 'District', 'Gender'];
 const BULK_TEMPLATE_EXAMPLE = ['Arjun Kumar', 'Greenwood High School', '9th Standard', 'A', 'Madurai', 'male'];
@@ -31,6 +32,7 @@ export default function AdminDashboard() {
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+  const [graduateMap, setGraduateMap] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -60,7 +62,10 @@ export default function AdminDashboard() {
     async function loadAdminData() {
       try {
         const activeAdmin = await dataService.getActiveStudent();
-        if (!activeAdmin) { router.push('/login'); return; }
+        // Was previously only checking "is logged in" — any STUDENT could
+        // open the full roster (unscoped, as if Super Admin) just by
+        // navigating to /admin directly.
+        if (!activeAdmin || !['TEACHER_ADMIN', 'SUPER_ADMIN'].includes(activeAdmin.role)) { router.push('/login'); return; }
         setAdminProfile(activeAdmin);
 
         let [students, modules] = await Promise.all([
@@ -77,15 +82,41 @@ export default function AdminDashboard() {
         setStudentsList(students);
         setAllModules(modules);
 
-        // Fetch completed lesson counts per student
+        // Completed lesson counts + graduate status per student — two bulk
+        // queries covering every student, not one round-trip per student.
+        // The previous per-student Promise.all fired 2 requests × student
+        // count simultaneously from one browser tab; fine at the ~30-student
+        // scale this was built and tested against, but it would queue
+        // against the browser's per-origin connection cap (and Supabase's
+        // pooler limits) well before reaching a few thousand students.
+        const [allProgress, allQuizAttempts] = await Promise.all([
+          dataService.getAllProgress(),
+          dataService.getAllQuizAttempts(),
+        ]);
+        const studentIds = new Set(students.map((s: any) => s.id));
+        const progressByStudent = new Map<string, any[]>();
+        allProgress.forEach((p: any) => {
+          if (!studentIds.has(p.student_id)) return;
+          const list = progressByStudent.get(p.student_id);
+          if (list) list.push(p); else progressByStudent.set(p.student_id, [p]);
+        });
+        const attemptsByStudent = new Map<string, any[]>();
+        allQuizAttempts.forEach((a: any) => {
+          if (!studentIds.has(a.student_id)) return;
+          const list = attemptsByStudent.get(a.student_id);
+          if (list) list.push(a); else attemptsByStudent.set(a.student_id, [a]);
+        });
+
         const counts: Record<string, number> = {};
-        await Promise.all(
-          students.map(async (s: any) => {
-            const prog = await dataService.getProgress(s.id);
-            counts[s.id] = prog.filter((p: any) => p.status === 'COMPLETED').length;
-          })
-        );
+        const graduates: Record<string, boolean> = {};
+        students.forEach((s: any) => {
+          const prog = progressByStudent.get(s.id) ?? [];
+          const attempts = attemptsByStudent.get(s.id) ?? [];
+          counts[s.id] = prog.filter((p: any) => p.status === 'COMPLETED').length;
+          graduates[s.id] = isGraduateShared(modules, prog, attempts);
+        });
         setProgressMap(counts);
+        setGraduateMap(graduates);
       } catch (e) {
         console.error('Error loading admin data:', e);
       } finally {
@@ -252,8 +283,8 @@ export default function AdminDashboard() {
   const isSuperAdmin = adminProfile.role === 'SUPER_ADMIN';
   const totalLessons = allModules.reduce((acc, m) => acc + (m.lessons?.length || 0), 0);
   const totalStudents = filteredStudents.length;
-  const graduateCount = filteredStudents.filter(s => totalLessons > 0 && (progressMap[s.id] ?? 0) >= totalLessons).length;
-  const activeLearnersCount = filteredStudents.filter(s => (progressMap[s.id] ?? 0) > 0 && (progressMap[s.id] ?? 0) < totalLessons).length;
+  const graduateCount = filteredStudents.filter(s => graduateMap[s.id]).length;
+  const activeLearnersCount = filteredStudents.filter(s => (progressMap[s.id] ?? 0) > 0 && !graduateMap[s.id]).length;
 
   return (
     <div className="flex overflow-hidden h-screen bg-neutral-50 font-body text-neutral-900">
@@ -366,7 +397,7 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-neutral-100">
                   {filteredStudents.map((student) => {
                     const completed = progressMap[student.id] ?? 0;
-                    const isGraduate = totalLessons > 0 && completed >= totalLessons;
+                    const isGraduate = graduateMap[student.id] ?? false;
                     return (
                       <tr key={student.id} className="hover:bg-neutral-50/50 transition-colors">
                         <td className="px-6 py-4">
@@ -390,14 +421,14 @@ export default function AdminDashboard() {
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => handleViewProgress(student)}
-                              title="View Progress"
+                              title="View Progress" aria-label="View Progress"
                               className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all"
                             >
                               <span className="material-symbols-outlined text-lg">bar_chart</span>
                             </button>
                             <button
                               onClick={() => setDeleteStudentTarget(student)}
-                              title="Delete Student"
+                              title="Delete Student" aria-label="Delete Student"
                               className="p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all"
                             >
                               <span className="material-symbols-outlined text-lg">delete</span>
@@ -462,7 +493,7 @@ export default function AdminDashboard() {
                     const total = moduleLessonIds.length;
                     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
                     const quizAttempt = studentQuizAttempts
-                      .filter(a => a.quiz_id === `quiz-${m.id}`)
+                      .filter(a => a.quiz_id === resolveQuizId(m))
                       .sort((a, b) => new Date(b.attempted_at).getTime() - new Date(a.attempted_at).getTime())[0];
 
                     return (

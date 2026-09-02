@@ -9,6 +9,7 @@ import { fadeUp, staggerContainer, springSoft } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
 import AdminSidebar from '../AdminSidebar';
 import ActivityTrendChart from './ActivityTrendChart';
+import { isModuleComplete as isModuleCompleteShared, resolveQuizId } from '@/lib/gamification';
 
 const REGIONS = ['North', 'South', 'East', 'West', 'Northeast', 'Other'];
 
@@ -22,6 +23,8 @@ export default function SuperAdminAnalytics() {
   const [modules, setModules] = useState<any[]>([]);
   const [allProgress, setAllProgress] = useState<any[]>([]);
   const [allQuizAttempts, setAllQuizAttempts] = useState<any[]>([]);
+  const [gapExplanations, setGapExplanations] = useState<any[]>([]);
+  const [conceptContent, setConceptContent] = useState<any[]>([]);
   const [schoolsDirectory, setSchoolsDirectory] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
@@ -41,11 +44,13 @@ export default function SuperAdminAnalytics() {
         }
         setAdminRole(admin.role);
         setAdminName(admin.fullName || 'Admin');
-        let [s, m, p, q] = await Promise.all([
+        let [s, m, p, q, gap, concepts] = await Promise.all([
           dataService.getStudents(),
           dataService.getModules(),
           dataService.getAllProgress(),
           dataService.getAllQuizAttempts(),
+          dataService.getAllGapExplanations(),
+          dataService.getConceptContent(),
         ]);
         if (admin.role === 'TEACHER_ADMIN') {
           const schoolIds = await dataService.getAdminSchoolIds(admin.id);
@@ -58,11 +63,14 @@ export default function SuperAdminAnalytics() {
           const scopedStudentIds = new Set(s.map((st: any) => st.id));
           p = p.filter((row: any) => scopedStudentIds.has(row.student_id));
           q = q.filter((row: any) => scopedStudentIds.has(row.student_id));
+          gap = gap.filter((row: any) => scopedStudentIds.has(row.student_id));
         }
         setStudents(s);
         setModules(m);
         setAllProgress(p);
         setAllQuizAttempts(q);
+        setGapExplanations(gap);
+        setConceptContent(concepts);
         // Organization rollups are additive — don't let a missing
         // school_organizations.sql migration break the whole page.
         try {
@@ -88,21 +96,20 @@ export default function SuperAdminAnalytics() {
   }, []);
 
   // ── Helpers ──────────────────────────────────────────────────
-  function isModuleComplete(moduleId: string, lessons: any[], studentId: string): boolean {
-    if (!lessons || lessons.length === 0) {
-      return allQuizAttempts.some(a => a.student_id === studentId && a.quiz_id === `quiz-${moduleId}` && a.passed);
-    }
-    return lessons.every(l =>
-      allProgress.some(p => p.student_id === studentId && p.lesson_id === l.id && p.status === 'COMPLETED')
-    );
+  // Thin per-student wrapper: filters the platform-wide progress/attempts
+  // arrays down to one student, then delegates to the shared canonical logic.
+  function isModuleComplete(module: any, studentId: string): boolean {
+    const studentProgress = allProgress.filter(p => p.student_id === studentId);
+    const studentAttempts = allQuizAttempts.filter(a => a.student_id === studentId);
+    return isModuleCompleteShared(module, studentProgress, studentAttempts);
   }
 
   function isGraduate(studentId: string): boolean {
-    return modules.length > 0 && modules.every(m => isModuleComplete(m.id, m.lessons ?? [], studentId));
+    return modules.length > 0 && modules.every(m => isModuleComplete(m, studentId));
   }
 
   function studentModuleCompletionCount(studentId: string): number {
-    return modules.filter(m => isModuleComplete(m.id, m.lessons ?? [], studentId)).length;
+    return modules.filter(m => isModuleComplete(m, studentId)).length;
   }
 
   // ── Summary stats ─────────────────────────────────────────────
@@ -146,7 +153,7 @@ export default function SuperAdminAnalytics() {
     if (!mod) return 0;
     const lessons = mod.lessons ?? [];
     if (!lessons.length) {
-      return allQuizAttempts.some(a => a.student_id === studentId && a.quiz_id === `quiz-${moduleId}` && a.passed) ? 100 : 0;
+      return allQuizAttempts.some(a => a.student_id === studentId && a.quiz_id === resolveQuizId(mod) && a.passed) ? 100 : 0;
     }
     const done = lessons.filter((l: any) =>
       allProgress.some(p => p.student_id === studentId && p.lesson_id === l.id && p.status === 'COMPLETED')
@@ -202,7 +209,7 @@ export default function SuperAdminAnalytics() {
 
   // ── Module breakdown ──────────────────────────────────────────
   const moduleStats = modules.map(m => {
-    const completed = students.filter(s => isModuleComplete(m.id, m.lessons ?? [], s.id)).length;
+    const completed = students.filter(s => isModuleComplete(m, s.id)).length;
     return { ...m, completed, rate: totalStudents > 0 ? Math.round((completed / totalStudents) * 100) : 0 };
   }).sort((a, b) => b.rate - a.rate);
 
@@ -271,6 +278,20 @@ export default function SuperAdminAnalytics() {
   const avgQuizScore = allQuizAttempts.length > 0
     ? Math.round(allQuizAttempts.reduce((sum, a) => sum + a.score, 0) / allQuizAttempts.length)
     : 0;
+
+  // ── Thalir Gap Coach: which concepts is this scope's cohort stuck on ──
+  const conceptTitleByTag = new Map(conceptContent.map((c: any) => [c.concept_tag, c.title]));
+  const gapSummary = (() => {
+    const byTag = new Map<string, Set<string>>();
+    gapExplanations.forEach((g: any) => {
+      const set = byTag.get(g.concept_tag) ?? new Set<string>();
+      set.add(g.student_id);
+      byTag.set(g.concept_tag, set);
+    });
+    return [...byTag.entries()]
+      .map(([tag, studentSet]) => ({ tag, title: conceptTitleByTag.get(tag) || tag, studentCount: studentSet.size }))
+      .sort((a, b) => b.studentCount - a.studentCount);
+  })();
 
   // ── District breakdown ────────────────────────────────────────
   const districtMap: Record<string, { region: string; students: number; graduates: number }> = {};
@@ -557,6 +578,31 @@ export default function SuperAdminAnalytics() {
               </>
             )}
           </div>
+        </div>
+
+        {/* ── Thalir Gap Coach: class gap summary ── */}
+        <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-neutral-100">
+          <div className="mb-6">
+            <h5 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
+              <span className="material-symbols-outlined text-sky-600" style={{ fontVariationSettings: "'FILL' 1" }}>lightbulb</span>
+              Gap Coach — Concepts Students Are Stuck On
+            </h5>
+            <p className="text-sm text-neutral-500">Grounded remedial explanations generated after a wrong quiz answer, rolled up by concept.</p>
+          </div>
+          {gapSummary.length === 0 ? (
+            <p className="text-sm text-neutral-400">No gaps flagged yet — nothing to show until students miss a question with a tagged concept.</p>
+          ) : (
+            <div className="space-y-3">
+              {gapSummary.map(g => (
+                <div key={g.tag} className="flex items-center justify-between bg-sky-50 border border-sky-100 rounded-2xl px-5 py-3.5">
+                  <span className="text-sm font-bold text-neutral-800">{g.title}</span>
+                  <span className="text-xs font-black text-sky-600 bg-white px-3 py-1 rounded-full">
+                    {g.studentCount} student{g.studentCount !== 1 ? 's' : ''} stuck
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Activity trend over time ── */}

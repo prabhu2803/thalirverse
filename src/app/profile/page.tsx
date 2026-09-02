@@ -8,19 +8,17 @@ import { dataService, supabase, getRegionFromDistrict } from '@/lib/supabaseClie
 import { SECURITY_QUESTIONS } from '@/lib/securityQuestions';
 import { fadeUp, staggerContainer, popIn } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
+import {
+  isModuleComplete as isModuleCompleteShared, getBadgeEarnedDate as getBadgeEarnedDateShared,
+  moduleTheme, XP_BONUS_TIERS, resolveQuizId,
+} from '@/lib/gamification';
 
 const NAV_LINKS = [
-  { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
-  { label: 'Explore',      href: '/explore',   icon: 'search' },
-  { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'My Learning',  href: '/dashboard',   icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',     icon: 'search' },
+  { label: 'Achievements', href: '/profile',     icon: 'military_tech' },
+  { label: 'Leaderboard',  href: '/leaderboard', icon: 'leaderboard' },
 ];
-
-const BADGE_ICONS: Record<string, string> = {
-  'road-safety':     'local_police',
-  'masoom':          'shield',
-  'entrepreneurship':'rocket_launch',
-  'leadership':      'stars',
-};
 
 export default function Profile() {
   const router   = useRouter();
@@ -90,31 +88,25 @@ export default function Profile() {
 
   useEffect(() => { loadData(); }, []);
 
-  const isModuleComplete = (m: any) => {
-    // Use directly-fetched lesson data (bypasses silent getModules() lessons failure)
-    const lessonIds = moduleLessons[m.id] ?? m.lessons?.map((l: any) => l.id) ?? [];
-    if (!lessonIds.length) return quizAttempts.some(a => a.quiz_id === `quiz-${m.id}` && a.passed);
-    return lessonIds.every((lid: string) => progress.some(p => p.lesson_id === lid && p.status === 'COMPLETED'));
+  // Use directly-fetched lesson data (bypasses silent getModules() lessons
+  // failure) — merge it onto the module before delegating to the shared
+  // completion logic, so this page keeps its extra robustness.
+  const effectiveModule = (m: any) => {
+    const lessonIds: string[] = moduleLessons[m.id] ?? m.lessons?.map((l: any) => l.id) ?? [];
+    return { ...m, lessons: lessonIds.map(id => ({ id })) };
   };
-
-  const getBadgeEarnedDate = (m: any) => {
-    const lessonIds = moduleLessons[m.id] ?? m.lessons?.map((l: any) => l.id) ?? [];
-    const lessonDates = progress
-      .filter(p => lessonIds.includes(p.lesson_id) && p.status === 'COMPLETED' && p.completed_at)
-      .map(p => new Date(p.completed_at).getTime());
-    const quizDates = quizAttempts
-      .filter(a => a.quiz_id === `quiz-${m.id}` && a.passed)
-      .map(a => new Date(a.attempted_at).getTime());
-    const latest = Math.max(0, ...lessonDates, ...quizDates);
-    return latest > 0 ? new Date(latest) : null;
-  };
+  const isModuleComplete = (m: any) => isModuleCompleteShared(effectiveModule(m), progress, quizAttempts);
+  const getBadgeEarnedDate = (m: any) => getBadgeEarnedDateShared(effectiveModule(m), progress, quizAttempts);
 
   const completedModules = useMemo(() => modules.filter(m => isModuleComplete(m)), [modules, moduleLessons, progress, quizAttempts]);
   const isGraduate       = modules.length > 0 && completedModules.length === modules.length;
   const xp                = student?.xp ?? 0;
 
-  // Learning History timeline — completed lessons + "started module" milestones
-  type TimelineItem = { type: 'completed' | 'started'; title: string; moduleTitle: string; at: string };
+  // Learning History timeline — completed lessons + "started module" milestones + XP awards
+  type TimelineItem = {
+    type: 'completed' | 'started' | 'xp'; title: string; moduleTitle: string; at: string;
+    xp?: number; tier?: string | null;
+  };
 
   const allActivity = useMemo(() => {
     const items: TimelineItem[] = [];
@@ -144,8 +136,22 @@ export default function Profile() {
       if (mod) items.push({ type: 'started', title: `Started ${mod.title}`, moduleTitle: mod.title, at });
     });
 
+    // XP awards — a persistent record beyond the ephemeral results-page
+    // confetti, sourced from the same xp_awarded column the RPC writes.
+    quizAttempts.filter(a => a.xp_awarded != null).forEach(a => {
+      const mod = modules.find(m => resolveQuizId(m) === a.quiz_id);
+      items.push({
+        type: 'xp',
+        title: `+${a.xp_awarded} XP earned`,
+        moduleTitle: mod?.title ?? '',
+        at: a.attempted_at,
+        xp: a.xp_awarded,
+        tier: a.xp_bonus_tier ?? null,
+      });
+    });
+
     return items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-  }, [progress, lessonMap, modules]);
+  }, [progress, lessonMap, modules, quizAttempts]);
 
   const activityFeed = useMemo(
     () => showAllActivity ? allActivity : allActivity.slice(0, 5),
@@ -212,6 +218,7 @@ export default function Profile() {
                 link.label === 'My Learning'  ? pathname === '/dashboard' :
                 link.label === 'Explore'      ? pathname.startsWith('/explore') :
                 link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
                 false;
               if ((link as any).disabled) {
                 return (
@@ -286,6 +293,7 @@ export default function Profile() {
                   link.label === 'My Learning'  ? pathname === '/dashboard' :
                   link.label === 'Explore'      ? pathname.startsWith('/explore') :
                   link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                  link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
                   false;
                 return (
                   <Link key={link.label} href={link.href} onClick={() => setMobileNavOpen(false)}
@@ -317,6 +325,7 @@ export default function Profile() {
             link.label === 'My Learning'  ? pathname === '/dashboard' :
             link.label === 'Explore'      ? pathname.startsWith('/explore') :
             link.label === 'Achievements' ? pathname.startsWith('/profile') :
+            link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
             false;
           return (
             <Link key={link.label} href={link.href}
@@ -407,14 +416,9 @@ export default function Profile() {
                   initial="hidden" animate="visible" variants={staggerContainer}>
                   {modules.map(m => {
                     const earned = isModuleComplete(m);
-                    const icon   = BADGE_ICONS[m.id] ?? 'workspace_premium';
-                    const COLORS: Record<string, { grad: string; ring: string }> = {
-                      'road-safety':      { grad: 'from-amber-400 to-amber-600',  ring: 'ring-amber-200' },
-                      'masoom':           { grad: 'from-blue-400 to-blue-600',    ring: 'ring-blue-200' },
-                      'entrepreneurship': { grad: 'from-purple-400 to-purple-600',ring: 'ring-purple-200' },
-                      'leadership':       { grad: 'from-green-400 to-green-600',  ring: 'ring-green-200' },
-                    };
-                    const c = COLORS[m.id] ?? { grad: 'from-orange-400 to-orange-600', ring: 'ring-orange-200' };
+                    const theme  = moduleTheme(m.id);
+                    const icon   = theme.icon;
+                    const c = { grad: `${theme.strong.from} ${theme.strong.to}`, ring: theme.soft.ring };
                     return (
                       <motion.div key={m.id} variants={fadeUp}
                         whileHover={earned ? { y: -4 } : undefined}
@@ -459,7 +463,7 @@ export default function Profile() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {completedModules.map(m => {
                     const attempt = quizAttempts
-                      .filter(a => a.quiz_id === `quiz-${m.id}` && a.passed)
+                      .filter(a => a.quiz_id === resolveQuizId(m) && a.passed)
                       .sort((a: any, b: any) => new Date(b.attempted_at).getTime() - new Date(a.attempted_at).getTime())[0];
                     const date = attempt
                       ? new Date(attempt.attempted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -480,7 +484,7 @@ export default function Profile() {
                             </div>
                           </div>
                           {isGraduate && (
-                            <a href={shareUrl} target="_blank" rel="noreferrer" title="Share on LinkedIn"
+                            <a href={shareUrl} target="_blank" rel="noreferrer" title="Share on LinkedIn" aria-label="Share on LinkedIn"
                               className="text-neutral-400 hover:text-[#0077b5] transition-colors shrink-0">
                               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                                 <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
@@ -553,10 +557,10 @@ export default function Profile() {
                   const lessons = m.lessons ?? [];
                   const done = lessons.length > 0
                     ? lessons.filter((l: any) => progress.some(p => p.lesson_id === l.id && p.status === 'COMPLETED')).length
-                    : (quizAttempts.some(a => a.quiz_id === `quiz-${m.id}` && a.passed) ? 1 : 0);
+                    : (quizAttempts.some(a => a.quiz_id === resolveQuizId(m) && a.passed) ? 1 : 0);
                   const total  = lessons.length || 1;
                   const pct    = Math.round((done / total) * 100);
-                  const icon   = BADGE_ICONS[m.id] ?? 'auto_stories';
+                  const icon   = moduleTheme(m.id).icon;
                   return (
                     <div key={m.id}>
                       <div className="flex items-center gap-2 mb-1.5">
@@ -589,19 +593,28 @@ export default function Profile() {
                     <ul className="space-y-8 relative">
                       {activityFeed.map((item, i) => {
                         const isCompleted = item.type === 'completed';
+                        const isXp = item.type === 'xp';
+                        const tierMeta = isXp && item.tier ? XP_BONUS_TIERS[item.tier] : null;
                         return (
                           <li key={i} className="flex gap-4">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 ring-8 ring-white shrink-0 ${
-                              isCompleted ? 'bg-orange-500 shadow-md' : 'bg-orange-50 border-2 border-orange-400'
+                              isXp        ? `${tierMeta?.bg ?? 'bg-orange-50'} border-2 ${tierMeta?.ring ?? 'border-orange-400'}` :
+                              isCompleted ? 'bg-orange-500 shadow-md' :
+                                            'bg-orange-50 border-2 border-orange-400'
                             }`}>
-                              <span className={`material-symbols-outlined text-sm ${isCompleted ? 'text-white' : 'text-orange-500'}`}
-                                style={{ fontVariationSettings: "'FILL' 1" }}>{isCompleted ? 'check' : 'play_circle'}</span>
+                              <span className={`material-symbols-outlined text-sm ${
+                                isXp ? (tierMeta?.color ?? 'text-orange-500') : isCompleted ? 'text-white' : 'text-orange-500'
+                              }`}
+                                style={{ fontVariationSettings: "'FILL' 1" }}>
+                                {isXp ? (tierMeta?.icon ?? 'bolt') : isCompleted ? 'check' : 'play_circle'}
+                              </span>
                             </div>
                             <div className="pt-2 min-w-0">
                               <h3 className="text-sm font-bold text-neutral-800 leading-tight truncate">
                                 {item.title}
                               </h3>
-                              {isCompleted && item.moduleTitle && <p className="text-xs text-neutral-500 mt-0.5 truncate">{item.moduleTitle}</p>}
+                              {(isCompleted || isXp) && item.moduleTitle && <p className="text-xs text-neutral-500 mt-0.5 truncate">{item.moduleTitle}</p>}
+                              {tierMeta && <p className={`text-[10px] font-black mt-0.5 ${tierMeta.color}`}>{tierMeta.label}</p>}
                               <p className="text-xs text-neutral-400 flex items-center gap-1 mt-1">
                                 <span className="material-symbols-outlined text-xs">calendar_today</span>
                                 {relativeTime(item.at)}

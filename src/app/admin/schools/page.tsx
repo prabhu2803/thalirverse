@@ -285,11 +285,11 @@ export default function AdminSchools() {
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => { setFormError(''); setSchoolModal(s); }}
-                              title="Edit" className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all">
+                              title="Edit" aria-label={`Edit ${s.name}`} className="p-2 rounded-xl text-neutral-400 hover:text-orange-500 hover:bg-orange-50 transition-all">
                               <span className="material-symbols-outlined text-lg">edit</span>
                             </button>
                             <button onClick={() => setSchoolDeleteTarget(s)}
-                              title="Delete" className="p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                              title="Delete" aria-label={`Delete ${s.name}`} className="p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all">
                               <span className="material-symbols-outlined text-lg">delete</span>
                             </button>
                           </div>

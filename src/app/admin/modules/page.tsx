@@ -12,6 +12,13 @@ import AdminSidebar from '../AdminSidebar';
 const ALPHA = ['A', 'B', 'C', 'D'];
 const STEPS = ['Module Details', 'Video Lessons', 'Quiz'];
 
+type QueuedLesson = { title: string; type: 'VIDEO' | 'PDF' | 'PRESENTATION'; url?: string; file?: File };
+
+const FILE_ACCEPT: Record<'PDF' | 'PRESENTATION', string> = {
+  PDF: '.pdf,application/pdf',
+  PRESENTATION: '.ppt,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint',
+};
+
 function makeQuestion(tmpId: string, order: number) {
   const qId = `new-q-${tmpId}-${order}`;
   return {
@@ -40,9 +47,11 @@ export default function AdminModules() {
 
   // Step 2 — lessons
   const [skipLessons, setSkipLessons] = useState(false);
-  const [newLessons, setNewLessons] = useState<{ title: string; url: string }[]>([]);
+  const [newLessons, setNewLessons] = useState<QueuedLesson[]>([]);
   const [lessonTitle, setLessonTitle] = useState('');
   const [lessonUrl, setLessonUrl] = useState('');
+  const [lessonType, setLessonType] = useState<'VIDEO' | 'PDF' | 'PRESENTATION'>('VIDEO');
+  const [lessonFile, setLessonFile] = useState<File | null>(null);
 
   // Step 3 — quiz
   const [includeQuiz, setIncludeQuiz] = useState(false);
@@ -67,7 +76,9 @@ export default function AdminModules() {
 
   useEffect(() => {
     dataService.getActiveStudent().then(a => {
-      if (!a || !['SUPER_ADMIN', 'TEACHER_ADMIN'].includes(a.role)) { router.push('/login'); return; }
+      // Course Builder is Super Admin only — matches AdminSidebar (Teacher
+      // Admins never see this link) and analytics' "Create New Course" FAB.
+      if (!a || a.role !== 'SUPER_ADMIN') { router.push('/login'); return; }
       setAdminRole(a.role);
       setAdminName(a.fullName || 'Admin');
     });
@@ -106,6 +117,7 @@ export default function AdminModules() {
     setStep(1);
     setNewTitle(''); setNewCategory(''); setNewDescription('');
     setSkipLessons(false); setNewLessons([]); setLessonTitle(''); setLessonUrl('');
+    setLessonType('VIDEO'); setLessonFile(null);
     setIncludeQuiz(false); setQuizTitle(''); setPassPercent(80);
     setTimeLimitSeconds(300); setShuffleQuestions(false);
     setQuestions([makeQuestion(String(Date.now()), 0)]);
@@ -121,9 +133,9 @@ export default function AdminModules() {
       if (!newTitle.trim() || !newCategory.trim()) { setCreateError('Title and category are required.'); return; }
       setQuizTitle(`${newTitle.trim()} Quiz`);
     }
-    if (step === 2 && lessonTitle.trim() && lessonUrl.trim()) {
-      setNewLessons(prev => [...prev, { title: lessonTitle.trim(), url: lessonUrl.trim() }]);
-      setLessonTitle(''); setLessonUrl('');
+    if (step === 2 && lessonTitle.trim() && (lessonType === 'VIDEO' ? lessonUrl.trim() : lessonFile)) {
+      setNewLessons(prev => [...prev, { title: lessonTitle.trim(), type: lessonType, url: lessonUrl.trim(), file: lessonFile ?? undefined }]);
+      setLessonTitle(''); setLessonUrl(''); setLessonFile(null);
     }
     setStep(s => s + 1);
   }
@@ -133,8 +145,8 @@ export default function AdminModules() {
   async function handleFinish() {
     // Flush any pending lesson form
     const finalLessons = [...newLessons];
-    if (!skipLessons && lessonTitle.trim() && lessonUrl.trim()) {
-      finalLessons.push({ title: lessonTitle.trim(), url: lessonUrl.trim() });
+    if (!skipLessons && lessonTitle.trim() && (lessonType === 'VIDEO' ? lessonUrl.trim() : lessonFile)) {
+      finalLessons.push({ title: lessonTitle.trim(), type: lessonType, url: lessonUrl.trim(), file: lessonFile ?? undefined });
     }
 
     setCreating(true);
@@ -142,8 +154,13 @@ export default function AdminModules() {
     try {
       const created = await dataService.createModule(newTitle.trim(), newCategory.trim(), newDescription.trim());
 
+      // The module doesn't exist until the line above, so any queued file
+      // uploads have been deferred until now — no orphaned bucket files if
+      // the wizard is abandoned before this point.
       for (let i = 0; i < finalLessons.length; i++) {
-        await dataService.addLesson(created.id, finalLessons[i].title, finalLessons[i].url, i);
+        const l = finalLessons[i];
+        const contentUrl = l.file ? await dataService.uploadLessonFile(l.file, created.id) : (l.url as string);
+        await dataService.addLesson(created.id, l.title, contentUrl, i, l.type);
       }
 
       if (includeQuiz && questions.some(q => q.question_text.trim())) {
@@ -405,7 +422,12 @@ export default function AdminModules() {
                           <span className="font-mono text-xs text-neutral-400 shrink-0">{(i + 1).toString().padStart(2, '0')}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-neutral-700 truncate">{l.title}</p>
-                            <p className="text-xs text-neutral-400 truncate">{l.url}</p>
+                            <p className="text-xs text-neutral-400 truncate">
+                              {l.type === 'VIDEO' ? l.url : l.file?.name}
+                              <span className="ml-1.5 text-neutral-300">
+                                &middot; {l.type === 'VIDEO' ? 'Video' : l.type === 'PDF' ? 'PDF' : 'Presentation'}
+                              </span>
+                            </p>
                           </div>
                           <button type="button" onClick={() => setNewLessons(prev => prev.filter((_, idx) => idx !== i))}
                             className="text-neutral-300 hover:text-red-400 transition-colors shrink-0">
@@ -414,18 +436,32 @@ export default function AdminModules() {
                         </div>
                       ))}
                       <div className="space-y-3 border-t border-neutral-100 pt-4">
+                        <div className="flex gap-2">
+                          {(['VIDEO', 'PDF', 'PRESENTATION'] as const).map(t => (
+                            <button key={t} type="button" onClick={() => { setLessonType(t); setLessonFile(null); setLessonUrl(''); }}
+                              className={`flex-1 text-xs font-bold py-2 rounded-xl transition-all ${lessonType === t ? 'bg-orange-500 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'}`}>
+                              {t === 'VIDEO' ? 'Video' : t === 'PDF' ? 'PDF' : 'Presentation'}
+                            </button>
+                          ))}
+                        </div>
                         <input type="text" value={lessonTitle} onChange={e => setLessonTitle(e.target.value)}
                           placeholder="Lesson title"
                           className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
-                        <input type="url" value={lessonUrl} onChange={e => setLessonUrl(e.target.value)}
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                        {lessonType === 'VIDEO' ? (
+                          <input key="url-input" type="url" value={lessonUrl} onChange={e => setLessonUrl(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            className="w-full px-4 py-2.5 bg-neutral-50 border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition-all" />
+                        ) : (
+                          <input key="file-input" type="file" accept={FILE_ACCEPT[lessonType]}
+                            onChange={e => setLessonFile(e.target.files?.[0] ?? null)}
+                            className="w-full text-sm text-neutral-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:bg-orange-50 file:text-orange-600 file:font-bold file:text-sm hover:file:bg-orange-100 cursor-pointer" />
+                        )}
                         <button type="button"
-                          disabled={!lessonTitle.trim() || !lessonUrl.trim()}
+                          disabled={!lessonTitle.trim() || (lessonType === 'VIDEO' ? !lessonUrl.trim() : !lessonFile)}
                           onClick={() => {
-                            if (!lessonTitle.trim() || !lessonUrl.trim()) return;
-                            setNewLessons(prev => [...prev, { title: lessonTitle.trim(), url: lessonUrl.trim() }]);
-                            setLessonTitle(''); setLessonUrl('');
+                            if (!lessonTitle.trim() || (lessonType === 'VIDEO' ? !lessonUrl.trim() : !lessonFile)) return;
+                            setNewLessons(prev => [...prev, { title: lessonTitle.trim(), type: lessonType, url: lessonUrl.trim(), file: lessonFile ?? undefined }]);
+                            setLessonTitle(''); setLessonUrl(''); setLessonFile(null);
                           }}
                           className="w-full py-2.5 border-2 border-dashed border-orange-300 hover:border-orange-500 text-orange-500 font-bold text-sm rounded-xl transition-all disabled:opacity-40 flex items-center justify-center gap-2">
                           <span className="material-symbols-outlined text-sm">add</span>

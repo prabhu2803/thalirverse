@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { dataService } from '@/lib/supabaseClient';
 import { PageSkeleton } from '@/components/motion/Skeleton';
+import { isModuleComplete, isGraduate as isGraduateShared } from '@/lib/gamification';
 
 const NAV_LINKS = [
-  { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
-  { label: 'Explore',      href: '/explore',   icon: 'search' },
-  { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'My Learning',  href: '/dashboard',   icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',     icon: 'search' },
+  { label: 'Achievements', href: '/profile',     icon: 'military_tech' },
+  { label: 'Leaderboard',  href: '/leaderboard', icon: 'leaderboard' },
 ];
 
 type NotifType = 'achievement' | 'module' | 'reminder' | 'certificate';
@@ -68,9 +70,7 @@ function buildNotifications(
   // Module completions
   modules.forEach(m => {
     const lessons = m.lessons ?? [];
-    const allDone = lessons.length > 0 && lessons.every((l: any) =>
-      progress.some(p => p.lesson_id === l.id && p.status === 'COMPLETED')
-    );
+    const allDone = lessons.length > 0 && isModuleComplete(m, progress, quizAttempts);
     if (allDone) {
       const lastProgress = [...progress]
         .filter(p => lessons.some((l: any) => l.id === p.lesson_id))
@@ -160,12 +160,7 @@ export default function Notifications() {
     })();
   }, []);
 
-  const isGraduate = useMemo(() =>
-    modules.length > 0 && modules.every(m => {
-      const lessons = m.lessons ?? [];
-      if (!lessons.length) return quizAttempts.some(a => a.quiz_id === `quiz-${m.id}` && a.passed);
-      return lessons.every((l: any) => progress.some(p => p.lesson_id === l.id && p.status === 'COMPLETED'));
-    }),
+  const isGraduate = useMemo(() => isGraduateShared(modules, progress, quizAttempts),
   [modules, progress, quizAttempts]);
 
   const notifications = useMemo(
@@ -185,11 +180,7 @@ export default function Notifications() {
   const recentItems  = filtered.filter(n => isRecent(n.createdAt));
   const oldItems     = filtered.filter(n => !isRecent(n.createdAt));
 
-  const completedModules = modules.filter(m => {
-    const lessons = m.lessons ?? [];
-    if (!lessons.length) return quizAttempts.some(a => a.quiz_id === `quiz-${m.id}` && a.passed);
-    return lessons.every((l: any) => progress.some(p => p.lesson_id === l.id && p.status === 'COMPLETED'));
-  });
+  const completedModules = modules.filter(m => isModuleComplete(m, progress, quizAttempts));
   const goalPercent = modules.length > 0 ? Math.round((completedModules.length / modules.length) * 100) : 0;
 
   const markAllRead = () => setReadIds(new Set(notifications.map(n => n.id)));
@@ -253,6 +244,7 @@ export default function Notifications() {
                 link.label === 'My Learning'  ? pathname === '/dashboard' :
                 link.label === 'Explore'      ? pathname.startsWith('/explore') :
                 link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
                 false;
               return (
                 <Link key={link.label} href={link.href}

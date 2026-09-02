@@ -2,11 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion, animate } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { dataService, supabase } from '@/lib/supabaseClient';
-import { fadeUp, popIn, staggerContainer, springSoft } from '@/lib/motion';
+import { fadeUp, popIn, staggerContainer, springSoft, springBouncy } from '@/lib/motion';
 import { SkeletonBlock } from '@/components/motion/Skeleton';
+import { XP_BONUS_TIERS, shouldSuggestNaturalStop } from '@/lib/gamification';
 
 function fireConfetti() {
   confetti({
@@ -19,23 +21,29 @@ function fireConfetti() {
   });
 }
 
-const SIDEBAR_LINKS = [
-  { label: 'Dashboard',   href: '/dashboard', icon: 'home' },
-  { label: 'My Courses',  href: '/dashboard', icon: 'auto_stories' },
-  { label: 'Assessments', href: '/dashboard', icon: 'quiz',        active: true },
-  { label: 'Resources',   href: '#',          icon: 'library_books' },
-  { label: 'Community',   href: '#',          icon: 'forum' },
+const NAV_LINKS = [
+  { label: 'My Learning',  href: '/dashboard',   icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',     icon: 'search' },
+  { label: 'Achievements', href: '/profile',     icon: 'military_tech' },
+  { label: 'Leaderboard',  href: '/leaderboard', icon: 'leaderboard' },
 ];
 
 export default function QuizResults({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
+  const pathname = usePathname();
 
   const [student,  setStudent]  = useState<any>(null);
   const [course,   setCourse]   = useState<any>(null);
   const [result,   setResult]   = useState<any>(null);
   const [showAll,  setShowAll]  = useState(false);
   const [xpAwarded, setXpAwarded] = useState(false);
+  const [xpResult, setXpResult] = useState<{ base_xp: number; bonus_xp: number; bonus_tier: string; total_awarded: number } | null>(null);
+  const [showBonus, setShowBonus] = useState(false);
   const [displayScore, setDisplayScore] = useState(0);
+  const [progress, setProgress] = useState<any[]>([]);
+  const [quizAttempts, setQuizAttempts] = useState<any[]>([]);
+  const [gapExplanations, setGapExplanations] = useState<{ concept_tag: string; title: string; explanation: string; priority: number }[]>([]);
+  const [gapLoading, setGapLoading] = useState(false);
   const confettiFiredRef = useRef(false);
 
   // Fires exactly once, only when XP is actually (freshly) awarded this
@@ -60,26 +68,63 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
 
   useEffect(() => {
     (async () => {
-      const [s, c] = await Promise.all([
-        dataService.getActiveStudent(),
-        dataService.getModule(id),
-      ]);
+      const s = await dataService.getActiveStudent();
       setStudent(s);
+
+      const [c, prog, attempts] = await Promise.all([
+        dataService.getModule(id),
+        s ? dataService.getProgress(s.id) : Promise.resolve([]),
+        s ? dataService.getQuizAttempts(s.id) : Promise.resolve([]),
+      ]);
       setCourse(c);
+      setProgress(prog);
+      setQuizAttempts(attempts);
 
       const stored = sessionStorage.getItem(`quiz_result_${id}`);
       if (stored) {
         const r = JSON.parse(stored);
         setResult(r);
 
-        // Award XP if passed and not yet awarded this session
-        if (r.passed && s?.id && !sessionStorage.getItem(`xp_awarded_${id}`)) {
-          const xpEarned = Math.round((r.score / 100) * (r.total * 10) + 100);
-          const { data: prof } = await supabase.from('profiles').select('xp').eq('id', s.id).single();
-          const currentXP = (prof as any)?.xp ?? 0;
-          await supabase.from('profiles').update({ xp: currentXP + xpEarned }).eq('id', s.id);
-          sessionStorage.setItem(`xp_awarded_${id}`, '1');
-          setXpAwarded(true);
+        // Server-side XP award — idempotent, so re-visiting/refreshing this
+        // page replays the stored breakdown instead of re-rolling the gacha.
+        if (r.passed && s?.id && r.attemptId) {
+          const xp = await dataService.awardQuizXp(r.attemptId);
+          if (xp) {
+            setXpResult(xp);
+            if (xp.is_first_award) {
+              setXpAwarded(true);
+              // Base XP counts up first; the bonus chip pops in a beat later.
+              setTimeout(() => setShowBonus(true), 900);
+            } else {
+              setShowBonus(true);
+            }
+          }
+        }
+
+        // Thalir Gap Coach — non-blocking. Only fires when there's actually
+        // something to remediate; never affects the rest of this page's
+        // rendering or the Continue/Review flow either way.
+        if (r.attemptId && r.correct < r.total) {
+          setGapLoading(true);
+          (async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session) return;
+              const res = await fetch('/api/gap-coach/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ attempt_id: r.attemptId }),
+              });
+              if (res.ok) {
+                const json = await res.json();
+                setGapExplanations(json.results ?? []);
+              }
+            } catch {
+              // Silent — the results page must never look broken because of this.
+            } finally {
+              setGapLoading(false);
+            }
+          })();
         }
       } else {
         setResult({ score: 0, correct: 0, total: 0, passed: false, timeTaken: '00:00', breakdown: [] });
@@ -109,7 +154,10 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
   }
 
   const { score, correct, total, passed, timeTaken, breakdown = [] } = result;
-  const xpEarned = passed ? Math.round((score / 100) * (total * 10) + 100) : 0;
+  // Optimistic display while the award RPC is in flight — same formula the
+  // server uses, so the number never visibly jumps once xpResult lands.
+  const baseXp = xpResult?.base_xp ?? (passed ? Math.round((score / 100) * (total * 10) + 100) : 0);
+  const bonusTier = xpResult && xpResult.bonus_xp > 0 ? XP_BONUS_TIERS[xpResult.bonus_tier] : null;
   const visibleBreakdown = showAll ? breakdown : breakdown.slice(0, 3);
 
   return (
@@ -123,20 +171,28 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
         </div>
 
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {SIDEBAR_LINKS.map(link => (
-            <Link key={link.label} href={link.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-label font-semibold transition-all ${
-                link.active
-                  ? 'bg-orange-50 text-orange-600 font-bold'
-                  : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800'
-              }`}>
-              <span className="material-symbols-outlined text-[20px]"
-                style={{ fontVariationSettings: link.active ? "'FILL' 1" : "'FILL' 0" }}>
-                {link.icon}
-              </span>
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map(link => {
+            const isActive =
+              link.label === 'My Learning'  ? pathname === '/dashboard' :
+              link.label === 'Explore'      ? pathname.startsWith('/explore') :
+              link.label === 'Achievements' ? pathname.startsWith('/profile') :
+              link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
+              false;
+            return (
+              <Link key={link.label} href={link.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-label font-semibold transition-all ${
+                  isActive
+                    ? 'bg-orange-50 text-orange-600 font-bold'
+                    : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800'
+                }`}>
+                <span className="material-symbols-outlined text-[20px]"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                  {link.icon}
+                </span>
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Upgrade Pro card */}
@@ -229,18 +285,45 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
             <div className="grid grid-cols-3 border-t border-neutral-100">
               {[
                 { icon: 'schedule', label: 'Time Saved', value: timeTaken },
-                { icon: 'bolt',     label: 'XP Gained',  value: `+${xpEarned}`, color: 'text-orange-500' },
+                null, // XP cell rendered separately below (needs the bonus chip)
                 { icon: 'check',    label: 'Accuracy',   value: `${correct} / ${total}`, color: 'text-green-600' },
-              ].map(s => (
+              ].map(s => s ? (
                 <div key={s.label} className="flex flex-col items-center py-5 px-4 border-r border-neutral-100 last:border-r-0">
                   <span className={`material-symbols-outlined text-xl mb-1 ${s.color ?? 'text-neutral-400'}`}
                     style={{ fontVariationSettings: "'FILL' 1" }}>{s.icon}</span>
                   <p className={`text-lg font-headline font-black ${s.color ?? 'text-neutral-800'}`}>{s.value}</p>
                   <p className="text-[10px] font-label text-neutral-400 uppercase tracking-wider">{s.label}</p>
                 </div>
+              ) : (
+                <div key="xp" className="flex flex-col items-center py-5 px-4 border-r border-neutral-100 last:border-r-0">
+                  <span className="material-symbols-outlined text-xl mb-1 text-orange-500" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                  <p className="text-lg font-headline font-black text-orange-500">+{baseXp}</p>
+                  <p className="text-[10px] font-label text-neutral-400 uppercase tracking-wider mb-1.5">XP Gained</p>
+                  {bonusTier && showBonus && (
+                    <motion.span initial={{ opacity: 0, scale: 0.5, y: -6 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={springBouncy}
+                      className={`flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full ring-1 ${bonusTier.bg} ${bonusTier.color} ${bonusTier.ring}`}>
+                      <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>{bonusTier.icon}</span>
+                      {bonusTier.label} +{xpResult!.bonus_xp}
+                    </motion.span>
+                  )}
+                </div>
               ))}
             </div>
           </motion.div>
+
+          {/* Natural stopping point — additive only, never replaces the
+              Continue/Review options below it. */}
+          {shouldSuggestNaturalStop(progress, quizAttempts) && (
+            <motion.div variants={fadeUp}
+              className="flex items-start gap-3 p-4 bg-green-50 border border-green-100 rounded-2xl text-green-800">
+              <span className="material-symbols-outlined text-green-500 shrink-0">self_improvement</span>
+              <p className="text-sm">
+                Nice work &mdash; you&rsquo;ve completed a couple of things today. This is a good moment to
+                stop for now; your progress is saved, and tomorrow&rsquo;s a great day to keep going.
+              </p>
+            </motion.div>
+          )}
 
           {/* Performance Breakdown */}
           {breakdown.length > 0 && (
@@ -288,6 +371,31 @@ export default function QuizResults({ params }: { params: Promise<{ id: string }
                   </button>
                 )}
               </div>
+            </motion.div>
+          )}
+
+          {/* Thalir Gap Coach — additive only, never replaces Continue/Review */}
+          {(gapLoading || gapExplanations.length > 0) && (
+            <motion.div variants={fadeUp} className="bg-sky-50 rounded-3xl border border-sky-100 p-6">
+              <h3 className="font-headline font-bold text-base flex items-center gap-2 mb-1">
+                <span className="material-symbols-outlined text-sky-600" style={{ fontVariationSettings: "'FILL' 1" }}>lightbulb</span>
+                Before You Retry
+              </h3>
+              {gapLoading ? (
+                <div className="space-y-2 mt-4">
+                  <SkeletonBlock className="h-4 w-3/4 rounded-full" />
+                  <SkeletonBlock className="h-4 w-1/2 rounded-full" />
+                </div>
+              ) : (
+                <div className="space-y-3 mt-3">
+                  {gapExplanations.map(g => (
+                    <div key={g.concept_tag} className="bg-white rounded-2xl p-4 border border-sky-100">
+                      <p className="text-xs font-black uppercase tracking-wider text-sky-600 mb-1">{g.title}</p>
+                      <p className="text-sm text-neutral-700 leading-relaxed">{g.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 

@@ -7,34 +7,24 @@ import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { PageSkeleton } from '@/components/motion/Skeleton';
+import { moduleTheme, isModuleComplete, isModuleUnlocked, getModuleProgress } from '@/lib/gamification';
 
 const NAV_LINKS = [
-  { label: 'My Learning',  href: '/dashboard', icon: 'auto_stories' },
-  { label: 'Explore',      href: '/explore',   icon: 'search' },
-  { label: 'Achievements', href: '/profile',   icon: 'military_tech' },
+  { label: 'My Learning',  href: '/dashboard',   icon: 'auto_stories' },
+  { label: 'Explore',      href: '/explore',     icon: 'search' },
+  { label: 'Achievements', href: '/profile',     icon: 'military_tech' },
+  { label: 'Leaderboard',  href: '/leaderboard', icon: 'leaderboard' },
 ];
-
-const MODULE_ICONS: Record<string, string> = {
-  'road-safety':      'local_police',
-  'masoom':           'shield',
-  'entrepreneurship': 'rocket_launch',
-  'leadership':       'stars',
-};
-
-const MODULE_COLORS: Record<string, { bg: string; icon: string; gradient: string }> = {
-  'road-safety':      { bg: 'bg-amber-50',  icon: 'text-amber-600',  gradient: 'from-amber-500 to-amber-700' },
-  'masoom':           { bg: 'bg-blue-50',   icon: 'text-blue-600',   gradient: 'from-blue-500 to-blue-700' },
-  'entrepreneurship': { bg: 'bg-purple-50', icon: 'text-purple-600', gradient: 'from-purple-500 to-purple-700' },
-  'leadership':       { bg: 'bg-green-50',  icon: 'text-green-600',  gradient: 'from-green-500 to-green-700' },
-};
 
 export default function Explore() {
   const router   = useRouter();
   const pathname = usePathname();
-  const [student,  setStudent]  = useState<any>(null);
-  const [modules,  setModules]  = useState<any[]>([]);
-  const [search,   setSearch]   = useState('');
-  const [loading,  setLoading]  = useState(true);
+  const [student,      setStudent]      = useState<any>(null);
+  const [modules,      setModules]      = useState<any[]>([]);
+  const [progress,     setProgress]     = useState<any[]>([]);
+  const [quizAttempts, setQuizAttempts] = useState<any[]>([]);
+  const [search,       setSearch]       = useState('');
+  const [loading,      setLoading]      = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -42,8 +32,14 @@ export default function Explore() {
         const s = await dataService.getActiveStudent();
         if (!s) { router.push('/login'); return; }
         setStudent(s);
-        const mods = await dataService.getModules();
+        const [mods, prog, attempts] = await Promise.all([
+          dataService.getModules(),
+          dataService.getProgress(s.id),
+          dataService.getQuizAttempts(s.id),
+        ]);
         setModules(mods);
+        setProgress(prog);
+        setQuizAttempts(attempts);
       } catch { /* silent */ }
       finally { setLoading(false); }
     })();
@@ -79,6 +75,7 @@ export default function Explore() {
                 link.label === 'My Learning'  ? pathname === '/dashboard' :
                 link.label === 'Explore'      ? pathname.startsWith('/explore') :
                 link.label === 'Achievements' ? pathname.startsWith('/profile') :
+                link.label === 'Leaderboard'  ? pathname.startsWith('/leaderboard') :
                 false;
               if ((link as any).disabled) {
                 return (
@@ -175,38 +172,63 @@ export default function Explore() {
             <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               initial="hidden" animate="visible" variants={staggerContainer}>
               {filtered.map(m => {
-                const colors = MODULE_COLORS[m.id] ?? { bg: 'bg-neutral-50', icon: 'text-neutral-500', gradient: 'from-neutral-500 to-neutral-700' };
-                const icon   = MODULE_ICONS[m.id] ?? 'auto_stories';
+                const theme  = moduleTheme(m.id);
+                const colors = { bg: theme.soft.bg, icon: theme.soft.icon, gradient: `${theme.strong.from} ${theme.strong.to}` };
+                const icon   = theme.icon;
                 const lessonCount = m.lessons?.length ?? 0;
-                return (
-                  <motion.div key={m.id} variants={fadeUp}>
-                  <Link href={`/courses/${m.id}`}
-                    className="group bg-white rounded-2xl border border-neutral-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
+
+                const complete = isModuleComplete(m, progress, quizAttempts);
+                const unlocked = isModuleUnlocked(m, modules, progress, quizAttempts);
+                const prog     = getModuleProgress(m, progress, quizAttempts);
+                const locked   = !unlocked;
+
+                const cardInner = (
+                  <>
                     {/* Card header */}
-                    <div className={`bg-gradient-to-br ${colors.gradient} p-8 flex items-center justify-center`}>
+                    <div className={`relative bg-gradient-to-br ${colors.gradient} p-8 flex items-center justify-center ${locked ? 'grayscale opacity-60' : ''}`}>
                       <span className="material-symbols-outlined text-white" style={{ fontSize: 52, fontVariationSettings: "'FILL' 1" }}>
-                        {icon}
+                        {locked ? 'lock' : complete ? 'check_circle' : icon}
                       </span>
                     </div>
                     {/* Card body */}
                     <div className="p-5 flex-1 flex flex-col">
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full w-max mb-3 ${colors.bg} ${colors.icon}`}>
-                        {m.category}
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full w-max mb-3 ${
+                        locked ? 'bg-neutral-100 text-neutral-400' :
+                        complete ? 'bg-green-50 text-green-600' :
+                        `${colors.bg} ${colors.icon}`
+                      }`}>
+                        {locked ? 'Locked' : complete ? 'Completed' : m.category}
                       </span>
                       <h3 className="font-headline font-black text-base text-neutral-900 mb-1 leading-tight">{m.title}</h3>
                       <p className="text-xs text-neutral-500 line-clamp-2 leading-relaxed flex-1">{m.description}</p>
                       <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-100">
                         <span className="flex items-center gap-1.5 text-xs text-neutral-400 font-medium">
                           <span className="material-symbols-outlined text-sm">play_lesson</span>
-                          {lessonCount} lesson{lessonCount !== 1 ? 's' : ''}
+                          {locked ? 'Complete the prior module' : `${prog.completed}/${prog.total || lessonCount} lessons`}
                         </span>
-                        <span className="flex items-center gap-1 text-xs font-bold text-orange-500 group-hover:gap-2 transition-all">
-                          Start
-                          <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                        </span>
+                        {!locked && (
+                          <span className="flex items-center gap-1 text-xs font-bold text-orange-500 group-hover:gap-2 transition-all">
+                            {complete ? 'Review' : prog.completed > 0 ? 'Continue' : 'Start'}
+                            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </Link>
+                  </>
+                );
+
+                return (
+                  <motion.div key={m.id} variants={fadeUp}>
+                    {locked ? (
+                      <div className="group bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden flex flex-col cursor-not-allowed">
+                        {cardInner}
+                      </div>
+                    ) : (
+                      <Link href={`/courses/${m.id}`}
+                        className="group bg-white rounded-2xl border border-neutral-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
+                        {cardInner}
+                      </Link>
+                    )}
                   </motion.div>
                 );
               })}

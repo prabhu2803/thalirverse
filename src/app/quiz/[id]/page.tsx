@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { stepSlide, springSnappy } from '@/lib/motion';
 import { SkeletonBlock } from '@/components/motion/Skeleton';
+import { isModuleUnlocked } from '@/lib/gamification';
 
 function shuffled<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -38,8 +39,27 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
       try {
         const s = await dataService.getActiveStudent();
         setStudent(s);
-        const c = await dataService.getModule(id);
+        const [c, mods] = await Promise.all([dataService.getModule(id), dataService.getModules()]);
         setCourse(c);
+
+        if (s && c) {
+          const [prog, attempts] = await Promise.all([
+            dataService.getProgress(s.id),
+            dataService.getQuizAttempts(s.id),
+          ]);
+          const totalLessons = c.lessons?.length ?? 0;
+          const doneLessons  = (c.lessons ?? []).filter((l: any) =>
+            prog.some((p: any) => p.lesson_id === l.id && p.status === 'COMPLETED')
+          ).length;
+          const quizUnlocked = !totalLessons || doneLessons === totalLessons;
+          // Real gating: bounce back if the module itself is locked, or its
+          // own lessons aren't finished yet — no more taking a quiz cold.
+          if (!isModuleUnlocked(c, mods, prog, attempts) || !quizUnlocked) {
+            router.push(`/courses/${id}`);
+            return;
+          }
+        }
+
         if (c?.quiz) {
           const q = c.quiz.shuffle_questions
             ? { ...c.quiz, questions: shuffled(c.quiz.questions ?? []) }
@@ -105,9 +125,14 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
     const score  = total > 0 ? Math.round((correct / total) * 100) : 0;
     const passed = score >= (quiz.pass_percentage ?? 80);
     clearInterval(timerRef.current);
-    await dataService.attemptQuiz(student.id, quiz.id, score, passed);
+    const attemptId = await dataService.attemptQuiz(student.id, quiz.id, score, passed);
+    if (attemptId) {
+      // Fire-and-forget — powers Thalir Gap Coach's grounding + retry
+      // tracking, never blocks navigation to the results page.
+      dataService.recordQuizAnswers(attemptId, student.id, breakdown, qs);
+    }
     sessionStorage.setItem(`quiz_result_${id}`, JSON.stringify({
-      score, correct, total, passed, timeTaken: fmt(300 - timeLeft), breakdown,
+      score, correct, total, passed, timeTaken: fmt(300 - timeLeft), breakdown, attemptId,
     }));
     router.push(`/quiz/${id}/results`);
   };
@@ -322,7 +347,7 @@ export default function QuizQuestion({ params }: { params: Promise<{ id: string 
                     reviewed.has(current.id)
                       ? 'bg-amber-100 text-amber-600'
                       : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-                  }`} title="Bookmark Question">
+                  }`} title="Bookmark Question" aria-label="Bookmark Question">
                   <span className="material-symbols-outlined"
                     style={{ fontVariationSettings: reviewed.has(current.id) ? "'FILL' 1" : "'FILL' 0" }}>bookmark</span>
                 </button>

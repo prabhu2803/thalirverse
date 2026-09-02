@@ -23,7 +23,9 @@ export default function AdminQuizzes() {
     async function load() {
       try {
         const admin = await dataService.getActiveStudent();
-        if (!admin || !['SUPER_ADMIN', 'TEACHER_ADMIN'].includes(admin.role)) { router.push('/login'); return; }
+        // Quiz Builder is Super Admin only — matches AdminSidebar (Teacher
+        // Admins never see this link).
+        if (!admin || admin.role !== 'SUPER_ADMIN') { router.push('/login'); return; }
         setAdminRole(admin.role);
         setAdminName(admin.fullName || 'Admin');
         await refresh();
@@ -131,7 +133,7 @@ export default function AdminQuizzes() {
                               <span className="material-symbols-outlined text-lg">{m.quiz ? 'edit' : 'add_circle'}</span>
                             </Link>
                             {m.quiz && (
-                              <button onClick={() => setDeleteTarget(m)} title="Delete Quiz"
+                              <button onClick={() => setDeleteTarget(m)} title="Delete Quiz" aria-label="Delete Quiz"
                                 className="p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all">
                                 <span className="material-symbols-outlined text-lg">delete</span>
                               </button>

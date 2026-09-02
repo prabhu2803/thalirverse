@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { dataService } from '@/lib/supabaseClient';
 import { fadeUp } from '@/lib/motion';
@@ -14,6 +15,7 @@ function makeQuestion(moduleId: string, order: number) {
   return {
     id: qId,
     question_text: '',
+    concept_tag: '',
     answers: ALPHA.map((_, i) => ({
       id: `a-${qId}-${i + 1}`,
       answer_text: '',
@@ -24,6 +26,7 @@ function makeQuestion(moduleId: string, order: number) {
 
 export default function AdminQuizEditor({ params }: { params: Promise<{ id: string }> }) {
   const { id: moduleId } = React.use(params);
+  const router = useRouter();
 
   const [moduleTitle, setModuleTitle] = useState('');
   const [isNewQuiz, setIsNewQuiz] = useState(true);
@@ -43,6 +46,11 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     async function load() {
       try {
+        // Quiz Builder is Super Admin only — was previously unguarded, so
+        // any logged-in role could open this editor directly by URL.
+        const admin = await dataService.getActiveStudent();
+        if (!admin || admin.role !== 'SUPER_ADMIN') { router.push('/login'); return; }
+
         const item = await dataService.getModule(moduleId);
         if (!item) return;
         setModuleTitle(item.title || '');
@@ -76,6 +84,8 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
   const removeQuestion = (idx: number) => setQuestions(prev => prev.filter((_, i) => i !== idx));
   const setQuestionText = (idx: number, text: string) =>
     setQuestions(prev => prev.map((q, i) => i === idx ? { ...q, question_text: text } : q));
+  const setConceptTag = (idx: number, tag: string) =>
+    setQuestions(prev => prev.map((q, i) => i === idx ? { ...q, concept_tag: tag } : q));
   const setAnswerText = (qIdx: number, aIdx: number, text: string) =>
     setQuestions(prev => prev.map((q, i) => i !== qIdx ? q : {
       ...q, answers: q.answers.map((a: any, j: number) => j === aIdx ? { ...a, answer_text: text } : a),
@@ -201,6 +211,13 @@ export default function AdminQuizEditor({ params }: { params: Promise<{ id: stri
                   onChange={e => setQuestionText(qIdx, e.target.value)}
                   placeholder="Enter question text..."
                   className="w-full px-4 py-2.5 bg-white border border-slate-100 rounded-xl focus:outline-none focus:border-orange-500 text-sm font-semibold transition-all" />
+
+                <div>
+                  <input type="text" value={q.concept_tag || ''}
+                    onChange={e => setConceptTag(qIdx, e.target.value)}
+                    placeholder="Concept tag (optional, e.g. traffic-signals) — powers Thalir Gap Coach"
+                    className="w-full px-4 py-2 bg-sky-50 border border-sky-100 rounded-xl focus:outline-none focus:border-sky-400 text-xs text-sky-700 transition-all" />
+                </div>
 
                 <div className="space-y-2">
                   <label className="font-label font-semibold text-xs text-neutral-400">Answer Options — click ✓ to mark correct</label>

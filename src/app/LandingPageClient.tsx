@@ -4,17 +4,17 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { fadeUp, staggerContainer, popIn } from '@/lib/motion';
 import { Reveal } from '@/components/motion/Reveal';
+import { moduleTheme } from '@/lib/gamification';
 
-// Keyed by module id (stable) rather than the free-text `category` column,
-// so every real seeded module (road-safety, masoom, entrepreneurship,
-// leadership) reliably gets its own tag/color/cover image.
-const MODULE_MEDIA: Record<string, { tag: string; tagClass: string; icon: string; gradient: string; image: string }> = {
-  default:            { tag: 'Foundation', tagClass: 'bg-orange-100 text-orange-700', icon: 'auto_stories',  gradient: 'from-orange-400 to-orange-600', image: '' },
-  'road-safety':      { tag: 'Foundation', tagClass: 'bg-rose-100 text-rose-700',     icon: 'traffic',       gradient: 'from-rose-400 to-rose-600',     image: '/courses/road-safety.svg' },
-  masoom:             { tag: 'Social',     tagClass: 'bg-sky-100 text-sky-700',       icon: 'shield',        gradient: 'from-sky-400 to-sky-600',       image: '/courses/masoom.svg' },
-  entrepreneurship:   { tag: 'Business',   tagClass: 'bg-amber-100 text-amber-700',   icon: 'rocket_launch', gradient: 'from-amber-400 to-orange-500',  image: '/courses/entrepreneurship.svg' },
-  leadership:         { tag: 'Leadership', tagClass: 'bg-purple-100 text-purple-700', icon: 'stars',         gradient: 'from-purple-400 to-purple-600', image: '/courses/leadership.svg' },
-};
+// Module cover/tag styling now comes from the shared MODULE_THEME
+// (src/lib/gamification.ts) — this used to be its own local map,
+// independently maintained and inconsistent with the other 3 copies
+// elsewhere in the app (road-safety's icon in particular didn't match).
+function landingMeta(id: string) {
+  const theme = moduleTheme(id);
+  return { tag: theme.tag, tagClass: theme.tagClass, icon: theme.icon,
+    gradient: `${theme.strong.from} ${theme.strong.to}`, image: theme.image };
+}
 
 const FEATURES = [
   { icon: 'interactive_space', title: 'Interactive Learning', desc: 'Engage with hands-on video modules designed for active participation and real-world skill building.' },
@@ -184,7 +184,7 @@ export default function LandingPageClient({ modules }: { modules: any[] }) {
             <motion.div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
               initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={staggerContainer}>
               {modules.map((m) => {
-                const meta = MODULE_MEDIA[m.id] ?? MODULE_MEDIA.default;
+                const meta = landingMeta(m.id);
                 return (
                   <motion.div key={m.id} variants={fadeUp}>
                   <Link href="/register"
@@ -237,7 +237,7 @@ export default function LandingPageClient({ modules }: { modules: any[] }) {
                 { id: 'entrepreneurship', title: 'Entrepreneurship 101', desc: 'Harness business development, problem-solving, and startup tools.' },
                 { id: 'leadership',       title: 'Leadership Explorer',  desc: 'Master public speaking, emotional intelligence, and teamwork dynamics.' },
               ].map((c) => {
-                const meta = MODULE_MEDIA[c.id] ?? MODULE_MEDIA.default;
+                const meta = landingMeta(c.id);
                 return (
                   <motion.div key={c.id} variants={fadeUp}>
                   <Link href="/register"

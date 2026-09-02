@@ -1,46 +1,54 @@
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
-import { CheckmarkReveal, CertificatePreviewCard } from './CertificateReveal';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { isGraduate as isGraduateShared } from '@/lib/gamification';
+import { CheckmarkReveal, CertificatePreviewCard, DownloadCertificateButton } from './CertificateReveal';
 
+// This is a public verification-link page — visitors are never signed in,
+// so the anon client (subject to RLS: `id = auth.uid()`) can never read the
+// student's data here regardless of the query. Uses the service-role admin
+// client instead, safe because this file is a plain Server Component
+// (executes server-only, never bundled to the client).
 async function getCertificateData(studentId: string) {
-  const { data: profile } = await supabase
+  const admin = getSupabaseAdmin();
+
+  const { data: profile } = await admin
     .from('profiles')
     .select('full_name, school, standard, created_at')
     .eq('id', studentId)
     .single();
 
-  const { data: attempts } = await supabase
-    .from('quiz_attempts')
-    .select('score, passed, attempted_at')
-    .eq('student_id', studentId)
-    .eq('passed', true);
+  const [{ data: modulesRaw }, { data: lessons }, { data: quizzes }, { data: progress }, { data: attempts }] = await Promise.all([
+    admin.from('modules').select('id, title, order_index').eq('is_published', true),
+    admin.from('lessons').select('id, module_id'),
+    admin.from('quizzes').select('id, module_id'),
+    admin.from('progress').select('lesson_id, status, completed_at').eq('student_id', studentId),
+    admin.from('quiz_attempts').select('quiz_id, score, passed, attempted_at').eq('student_id', studentId),
+  ]);
+  const modules = (modulesRaw ?? []).map(m => ({
+    ...m,
+    lessons: (lessons ?? []).filter(l => l.module_id === m.id),
+    quiz_id: quizzes?.find(q => q.module_id === m.id)?.id ?? null,
+  }));
 
-  const { count: moduleCount } = await supabase
-    .from('modules')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_published', true);
-
-  const isGraduate = (attempts?.length ?? 0) >= (moduleCount ?? 1);
-  const issueDate  = attempts?.reduce<string | null>((latest, a) => {
+  const passedAttempts = (attempts ?? []).filter(a => a.passed);
+  const isGraduate = isGraduateShared(modules, progress ?? [], attempts ?? []);
+  const issueDate  = passedAttempts.reduce<string | null>((latest, a) => {
     if (!latest) return a.attempted_at;
     return a.attempted_at > latest ? a.attempted_at : latest;
   }, null) ?? new Date().toISOString();
 
-  const avgScore = attempts?.length
-    ? Math.round(attempts.reduce((s, a) => s + a.score, 0) / attempts.length)
+  const avgScore = passedAttempts.length
+    ? Math.round(passedAttempts.reduce((s, a) => s + a.score, 0) / passedAttempts.length)
     : 0;
 
   const grade = avgScore >= 90 ? 'Distinction' : avgScore >= 75 ? 'Merit' : 'Pass';
 
-  // Deterministic hash from student ID
-  const hash = '0x' + Buffer.from(studentId.replace(/-/g, '')).toString('hex').slice(0, 40).toUpperCase();
-
-  return { profile, isGraduate, issueDate, grade, avgScore, hash };
+  return { profile, isGraduate, issueDate, grade, avgScore };
 }
 
 export default async function CertificateVerification({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { profile, isGraduate, issueDate, grade, hash } = await getCertificateData(id);
+  const { profile, isGraduate, issueDate, grade } = await getCertificateData(id);
 
   const issueFormatted = new Date(issueDate).toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
@@ -53,35 +61,34 @@ export default async function CertificateVerification({ params }: { params: Prom
     <div className="min-h-screen bg-neutral-50 font-body text-neutral-900 flex flex-col">
 
       {/* Top navbar */}
-      <header className="bg-white border-b border-neutral-100 h-14 flex items-center justify-between px-6 shadow-sm sticky top-0 z-40">
+      <header className="bg-white border-b border-neutral-100 h-14 flex items-center justify-between px-6 shadow-sm sticky top-0 z-40 print:hidden">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-orange-500 text-xl"
             style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
           <span className="font-headline font-black text-orange-500">ThalirVerse</span>
         </div>
         <nav className="flex items-center gap-4 text-sm font-label font-semibold">
-          <Link href="#" className="text-orange-500 font-bold">Verify Another</Link>
-          <Link href="#" className="text-neutral-500 hover:text-orange-500 transition-colors font-bold">Support</Link>
+          <Link href="/dashboard" className="flex items-center gap-1.5 text-neutral-500 hover:text-orange-500 transition-colors font-bold">
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+            Back to Dashboard
+          </Link>
         </nav>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-6xl">
           {isGraduate ? (
             /* ── Verified Layout ────────────────────────────────── */
             <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
 
               {/* Left panel: verification status + actions */}
-              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 flex flex-col gap-6">
+              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 flex flex-col gap-6 print:hidden">
                 {/* Check icon */}
                 <CheckmarkReveal />
 
                 {/* Actions */}
                 <div className="space-y-3">
-                  <button className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm rounded-xl shadow-md shadow-orange-500/20 transition-all hover:-translate-y-0.5">
-                    <span className="material-symbols-outlined text-sm">download</span>
-                    Download PDF Certificate
-                  </button>
+                  <DownloadCertificateButton />
                   <button className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-neutral-200 hover:border-orange-400 hover:text-orange-500 text-neutral-600 font-bold text-sm rounded-xl transition-all">
                     <span className="material-symbols-outlined text-sm">share</span>
                     Share Verification Link
@@ -101,7 +108,7 @@ export default async function CertificateVerification({ params }: { params: Prom
               {/* Right panel: student card + certificate preview */}
               <div className="space-y-5">
                 {/* Student info card */}
-                <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden print:hidden">
                   {/* Orange header bar */}
                   <div className="h-20 bg-gradient-to-r from-orange-500 to-orange-600 relative">
                     <div className="absolute -bottom-8 left-6 w-16 h-16 rounded-2xl bg-white border-4 border-white shadow-lg flex items-center justify-center text-2xl font-black text-orange-500">
@@ -111,7 +118,7 @@ export default async function CertificateVerification({ params }: { params: Prom
 
                   <div className="pt-12 pb-6 px-6">
                     <h3 className="text-xl font-headline font-black text-neutral-900">{studentName}</h3>
-                    <p className="text-sm text-neutral-500 mt-0.5">Student ID: {studentId}</p>
+                    <p className="text-sm text-neutral-500 mt-0.5">Certificate Number: {studentId}</p>
 
                     <div className="grid grid-cols-2 gap-4 mt-5">
                       <div>
@@ -128,25 +135,11 @@ export default async function CertificateVerification({ params }: { params: Prom
                         </div>
                       </div>
                     </div>
-
-                    {/* Blockchain hash */}
-                    <div className="mt-5 pt-5 border-t border-neutral-100">
-                      <p className="text-[10px] font-label font-bold text-neutral-400 uppercase tracking-wider mb-2">
-                        Blockchain Verification Hash
-                      </p>
-                      <div className="flex items-center gap-2 bg-neutral-50 rounded-xl px-3 py-2 border border-neutral-100">
-                        <span className="material-symbols-outlined text-neutral-400 text-sm">lock</span>
-                        <code className="text-xs text-neutral-600 font-mono flex-1 truncate">{hash}</code>
-                        <button className="text-neutral-400 hover:text-orange-500 transition-colors shrink-0">
-                          <span className="material-symbols-outlined text-sm">content_copy</span>
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 {/* Certificate preview */}
-                <CertificatePreviewCard studentName={studentName} issueFormatted={issueFormatted} grade={grade} />
+                <CertificatePreviewCard studentName={studentName} issueFormatted={issueFormatted} grade={grade} certificateNumber={studentId} />
               </div>
             </div>
           ) : (
@@ -170,16 +163,12 @@ export default async function CertificateVerification({ params }: { params: Prom
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-neutral-100 py-4 px-6">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400 font-label">
+      <footer className="bg-white border-t border-neutral-100 py-4 px-6 print:hidden">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400 font-label">
           <span>ThalirVerse | © 2026 ThalirVerse. All rights reserved.</span>
           <div className="flex gap-4">
-            {['Privacy Policy', 'Terms of Service', 'Support', 'Verify Another'].map(item => (
-              <Link key={item} href={item === 'Verify Another' ? '/certificate' : '#'}
-                className={`hover:text-neutral-600 transition-colors ${item === 'Verify Another' ? 'text-orange-500 font-bold hover:text-orange-600' : ''}`}>
-                {item}
-              </Link>
-            ))}
+            <Link href="/privacy" className="hover:text-neutral-600 transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-neutral-600 transition-colors">Terms of Service</Link>
           </div>
         </div>
       </footer>

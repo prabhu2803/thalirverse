@@ -183,7 +183,7 @@ export const dataService = {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, full_name, xp, security_question')
+      .select('role, full_name, xp, security_question, highest_milestone_celebrated')
       .eq('id', user.id)
       .single();
 
@@ -203,7 +203,38 @@ export const dataService = {
       role: profile?.role || 'STUDENT',
       xp: profile?.xp ?? 0,
       securityQuestion: profile?.security_question || '',
+      highestMilestoneCelebrated: profile?.highest_milestone_celebrated ?? 0,
     };
+  },
+
+  // Records that the student has seen the big celebration for this milestone
+  // tier, so CelebrationRocket never re-fires for it on a later visit.
+  async markMilestoneCelebrated(studentId: string, tier: number) {
+    const { error } = await supabase.from('profiles').update({ highest_milestone_celebrated: tier }).eq('id', studentId);
+    if (error) console.error('Milestone update error:', error);
+  },
+
+  // School-scoped leaderboard (never cross-school) — RLS can't support a
+  // student reading a classmate's row directly, so this goes through a
+  // SECURITY DEFINER RPC instead.
+  async getLeaderboard(limit = 20) {
+    const { data, error } = await supabase.rpc('get_school_leaderboard', { p_limit: limit });
+    if (error) { console.error('Leaderboard error:', error); return []; }
+    return (data ?? []) as { full_name: string; xp: number; rank: number; is_self: boolean }[];
+  },
+
+  // Class-scoped collective progress (school_id + standard, never classmate
+  // names/scores) — same reason getLeaderboard needs a SECURITY DEFINER RPC:
+  // RLS can't let a student read a classmate's row directly. Unlike the
+  // leaderboard this is intentionally non-comparative — aggregate counts only.
+  async getClassProgress() {
+    const { data, error } = await supabase.rpc('get_class_progress').maybeSingle();
+    if (error) { console.error('Class progress error:', error); return null; }
+    return data as {
+      class_size: number; students_active: number; total_lessons_completed: number;
+      total_quiz_passes: number; collective_completions: number; milestone_tier: number;
+      standard: string;
+    } | null;
   },
 
   async getModules() {
@@ -214,14 +245,17 @@ export const dataService = {
     if (error) throw error;
     if (!modules?.length) return [];
 
-    const { data: lessons } = await supabase
-      .from('lessons')
-      .select('*')
-      .order('order_index');
+    const [{ data: lessons }, { data: quizzes }] = await Promise.all([
+      supabase.from('lessons').select('*').order('order_index'),
+      supabase.from('quizzes').select('id, module_id'),
+    ]);
 
     return modules.map(m => ({
       ...m,
       lessons: (lessons ?? []).filter(l => l.module_id === m.id),
+      // null (not undefined) once we've actually checked and there's no
+      // quiz — isModuleComplete relies on that distinction.
+      quiz_id: quizzes?.find(q => q.module_id === m.id)?.id ?? null,
     }));
   },
 
@@ -266,19 +300,71 @@ export const dataService = {
   },
 
   async attemptQuiz(userId: string, quizId: string, score: number, passed: boolean) {
-    const { error } = await supabase.from('quiz_attempts').insert({
+    const { data, error } = await supabase.from('quiz_attempts').insert({
       student_id: userId,
       quiz_id: quizId,
       score,
       passed,
       attempted_at: new Date().toISOString(),
-    });
-    if (error) console.error('Quiz attempt error:', error);
+    }).select('id').single();
+    if (error) { console.error('Quiz attempt error:', error); return null; }
+    return data?.id as string | null;
   },
 
   async getQuizAttempts(userId: string) {
     const { data } = await supabase.from('quiz_attempts').select('*').eq('student_id', userId);
     return data ?? [];
+  },
+
+  // Persists which specific questions/concepts a student got wrong on this
+  // attempt — previously this only ever existed transiently in
+  // sessionStorage on the results page, which can't support retry-
+  // improvement tracking or a cross-student teacher gap summary. Powers
+  // Thalir Gap Coach. `questions` here is the quiz's own question list
+  // (each already carrying `concept_tag` from getModule's nested select).
+  async recordQuizAnswers(
+    attemptId: string, studentId: string,
+    breakdown: { questionId: string; userAnswerId: string | null; correctAnswerId: string }[],
+    questions: { id: string; concept_tag?: string | null }[]
+  ) {
+    if (!attemptId || breakdown.length === 0) return;
+    const conceptByQuestion = new Map(questions.map(q => [q.id, q.concept_tag ?? null]));
+    const rows = breakdown.map(b => ({
+      attempt_id: attemptId,
+      student_id: studentId,
+      question_id: b.questionId,
+      concept_tag: conceptByQuestion.get(b.questionId) ?? null,
+      selected_answer_id: b.userAnswerId,
+      is_correct: !!b.userAnswerId && b.userAnswerId === b.correctAnswerId,
+    }));
+    const { error } = await supabase.from('quiz_attempt_answers').insert(rows);
+    if (error) console.error('Record quiz answers error:', error);
+  },
+
+  // Compares a student's most recent two attempts at a given concept —
+  // the measurable "did the explanation actually help" signal.
+  async getRetryImprovement(studentId: string, conceptTag: string) {
+    const { data } = await supabase.from('quiz_attempt_answers')
+      .select('is_correct, created_at')
+      .eq('student_id', studentId).eq('concept_tag', conceptTag)
+      .order('created_at', { ascending: true });
+    if (!data || data.length < 2) return null;
+    const prior = data[data.length - 2];
+    const latest = data[data.length - 1];
+    return {
+      student_id: studentId, concept_tag: conceptTag,
+      prior_correct: prior.is_correct, new_correct: latest.is_correct,
+      improved: !prior.is_correct && latest.is_correct,
+    };
+  },
+
+  // Server-side XP award (rolls the gacha bonus tier, updates profiles.xp
+  // atomically). Idempotent — safe to call again on a page refresh, it
+  // replays the stored breakdown instead of re-rolling.
+  async awardQuizXp(attemptId: string) {
+    const { data, error } = await supabase.rpc('award_quiz_xp', { p_attempt_id: attemptId }).single();
+    if (error) { console.error('Award XP error:', error); return null; }
+    return data as { base_xp: number; bonus_xp: number; bonus_tier: string; total_awarded: number; new_xp_total: number; is_first_award: boolean };
   },
 
   async createModule(title: string, category: string, description: string) {
@@ -307,16 +393,41 @@ export const dataService = {
     if (error) throw error;
   },
 
-  async addLesson(moduleId: string, title: string, contentUrl: string, orderIndex: number) {
+  async addLesson(
+    moduleId: string, title: string, contentUrl: string, orderIndex: number,
+    lessonType: 'VIDEO' | 'PDF' | 'PRESENTATION' = 'VIDEO'
+  ) {
     const rand = Math.random().toString(36).slice(2, 7);
     const id = `${moduleId}-${Date.now()}-${rand}`;
     const { data, error } = await supabase.from('lessons').insert({
       id, module_id: moduleId, title,
-      lesson_type: 'VIDEO', content_url: contentUrl, order_index: orderIndex,
+      lesson_type: lessonType, content_url: contentUrl, order_index: orderIndex,
     }).select().single();
     if (error) throw error;
     if (!data) throw new Error('Lesson was not saved — check table permissions in Supabase.');
     return data;
+  },
+
+  // Uploads a PDF/PPT(X) lesson file to the public lesson-content bucket and
+  // returns its public URL — used as content_url the same way a pasted
+  // YouTube URL is. Write access is admin-only via storage RLS
+  // (sql/add_lesson_storage.sql); this call itself just uses the anon key,
+  // matching how every other admin write in this app goes straight from
+  // the browser rather than through a server route.
+  async uploadLessonFile(file: File, moduleId: string): Promise<string> {
+    const MAX_BYTES = 25 * 1024 * 1024; // must match add_lesson_storage.sql's file_size_limit
+    if (file.size > MAX_BYTES) {
+      throw new Error('File is too large — please upload a file under 25 MB.');
+    }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${moduleId}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from('lesson-content').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from('lesson-content').getPublicUrl(path);
+    return data.publicUrl;
   },
 
   async deleteLesson(id: string) {
@@ -347,7 +458,7 @@ export const dataService = {
       const q = questions[qi];
       const qId = q.id || `q-${moduleId}-${qi + 1}-${Date.now()}`;
       const { error: qErr } = await supabase.from('questions').upsert(
-        { id: qId, quiz_id: quizId, question_text: q.question_text, order_index: qi },
+        { id: qId, quiz_id: quizId, question_text: q.question_text, order_index: qi, concept_tag: q.concept_tag || null },
         { onConflict: 'id' }
       );
       if (qErr) throw qErr;
@@ -547,6 +658,19 @@ export const dataService = {
 
   async getAllQuizAttempts() {
     const { data } = await supabase.from('quiz_attempts').select('student_id,quiz_id,score,passed,attempted_at');
+    return data ?? [];
+  },
+
+  // Platform-wide Gap Coach explanations — admin pages scope this down to
+  // their own students client-side, same pattern as getAllProgress above.
+  async getAllGapExplanations() {
+    const { data } = await supabase.from('gap_coach_explanations')
+      .select('student_id,concept_tag,grounded,created_at').eq('grounded', true);
+    return data ?? [];
+  },
+
+  async getConceptContent() {
+    const { data } = await supabase.from('concept_content').select('concept_tag,module_id,title');
     return data ?? [];
   },
 
