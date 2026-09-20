@@ -689,7 +689,7 @@ export default function SuperAdminAnalytics() {
             {recentActivity.length === 0 ? (
               <p className="text-sm text-neutral-400">No activity yet.</p>
             ) : (
-              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <div className="overflow-x-auto max-h-96 overflow-y-auto" tabIndex={0} role="region" aria-label="Recent activity table">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-neutral-100 text-left sticky top-0 bg-white">

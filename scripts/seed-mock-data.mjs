@@ -10,7 +10,7 @@ import fs from 'node:fs';
 
 const env = {};
 fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n').forEach(l => {
-  const m = l.match(/^([A-Z0-9_]+)=(.*)$/);
+  const m = l.match(/^([A-Z0-9_]+)=(.*?)\r?$/);
   if (m) env[m[1]] = m[2].replace(/^"|"$/g, '');
 });
 const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -148,7 +148,7 @@ async function seedCourseContent() {
 
 // ── 2. Chapters + schools ──
 async function seedSchools() {
-  await rest('chapters', { method: 'POST', prefer: 'resolution=ignore-duplicates', body: [
+  await rest('chapters?on_conflict=name', { method: 'POST', prefer: 'resolution=ignore-duplicates', body: [
     { name: 'Trichy', city: 'Tiruchirappalli' },
   ] });
 
@@ -159,13 +159,14 @@ async function seedSchools() {
   const mahatmaOrgId = orgs.find(o => o.name === 'Mahatma schools')?.id ?? null;
 
   const schoolsToCreate = [
+    { name: 'Mahatama KK Nagar', city: 'Madurai', district: 'Madurai', chapter_id: chapterByName['Madurai'], organization_id: mahatmaOrgId, coordinator_name: 'Lakshmi Sundaram', coordinator_mobile: '9840001234' },
     { name: 'Mahatma Anna Nagar', city: 'Chennai', district: 'Chennai', chapter_id: chapterByName['Chennai'], organization_id: mahatmaOrgId, coordinator_name: 'Radha Krishnan', coordinator_mobile: '9840012345' },
     { name: 'Chennai Public School', city: 'Chennai', district: 'Chennai', chapter_id: chapterByName['Chennai'], organization_id: null, coordinator_name: 'Vijay Anand', coordinator_mobile: '9840023456' },
     { name: 'Nirmala Matric Hr Sec School', city: 'Coimbatore', district: 'Coimbatore', chapter_id: chapterByName['Coimbatore'], organization_id: null, coordinator_name: 'Saranya Moorthy', coordinator_mobile: '9840034567' },
     { name: "St. Joseph's Matriculation", city: 'Tiruchirappalli', district: 'Tiruchirappalli', chapter_id: chapterByName['Trichy'], organization_id: null, coordinator_name: 'Manikandan S', coordinator_mobile: '9840045678' },
   ];
 
-  await rest('schools', { method: 'POST', prefer: 'resolution=ignore-duplicates', body: schoolsToCreate });
+  await rest('schools?on_conflict=name', { method: 'POST', prefer: 'resolution=ignore-duplicates', body: schoolsToCreate });
 
   const schools = await rest('schools?select=id,name');
   return Object.fromEntries(schools.map(s => [s.name, s.id]));

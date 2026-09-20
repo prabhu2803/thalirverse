@@ -9,9 +9,41 @@
   --color-orange-200: #fed7aa;
   --color-orange-300: #fdba74;
   --color-orange-400: #fb923c;
-  --color-orange-500: #FF9933;
-  --color-orange-600: #ea580c;
+  /* Darkened from the original #FF9933 for WCAG AA contrast on white
+     (2.13:1 -> ~5.07:1) — same hue/saturation (30°, 100%), lower lightness
+     (60% -> 34%). #FF9933 failed axe's color-contrast rule (serious): both
+     as text on white (logo, headings) and as a button background under
+     white text ("Join Now"/"Get Started" — same ratio, inverted roles). */
+  --color-orange-500: #AD5700;
+  /* Darkened from Tailwind's stock #ea580c for WCAG AA contrast on white
+     (3.55:1 -> ~5.26:1) — same hue family, used as default-state accent
+     TEXT (active-tab labels, cross-page links like "Log in here") rather
+     than a button fill (buttons use orange-500 by default, orange-600 only
+     on :hover, which a static-page contrast scan never evaluates). */
+  --color-orange-600: #BB460A;
   --color-orange-700: #c2410c;
+  /* Darkened from Tailwind's stock #a1a1a1 for WCAG AA contrast on white
+     (2.58:1 -> ~4.74:1) — used consistently as muted/secondary TEXT
+     (labels, footer copyright, nav links) throughout the app, so a single
+     global override is safe here, unlike orange-500 which needed the same
+     treatment for a more varied reason (both text AND button backgrounds). */
+  --color-neutral-400: #737373;
+  /* Tailwind's stock neutral-500 (#737373, same value neutral-400 needed)
+     only reaches 4.34:1 against the slightly-off-white bg-neutral-100
+     (#f5f5f5) used behind the login tab switcher — just short of 4.5:1.
+     Same broad "muted text" usage as neutral-400, so a global override. */
+  --color-neutral-500: #707070;
+  /* text-green-600 on bg-green-50 (a "Completed" status badge, used
+     across dashboard/admin) only reached 3.07:1. Same hue as the original,
+     darkened for AA; green-600 is used broadly as semantic
+     success/completion text (14 files), consistent enough to override
+     globally like neutral-400, unlike green-500 which is mixed with
+     unrelated icon/checkmark uses. */
+  --color-green-600: #008532;
+  /* text-sky-500 on bg-sky-50 (Class Progress panel, Gap Coach UI) only
+     reached 2.53:1. Used consistently as "info panel" accent text across
+     its 4 usages, safe to override globally. */
+  --color-sky-500: #0076AD;
   --color-orange-800: #9a3412;
   --color-orange-900: #7c2d12;
   

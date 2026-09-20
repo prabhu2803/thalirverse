@@ -270,7 +270,7 @@ BEGIN
 
   UPDATE public.profiles
   SET security_question = p_question,
-      security_answer_hash = encode(digest(lower(trim(p_answer)), 'sha256'), 'hex')
+      security_answer_hash = encode(extensions.digest(lower(trim(p_answer)), 'sha256'), 'hex')
   WHERE id = auth.uid();
 END;
 $$;
@@ -321,7 +321,7 @@ BEGIN
   FROM public.profiles
   WHERE lower(trim(full_name)) = lower(trim(p_full_name))
     AND security_answer_hash IS NOT NULL
-    AND security_answer_hash = encode(digest(lower(trim(p_answer)), 'sha256'), 'hex')
+    AND security_answer_hash = encode(extensions.digest(lower(trim(p_answer)), 'sha256'), 'hex')
   LIMIT 1;
 
   RETURN matched_id;

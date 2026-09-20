@@ -95,30 +95,20 @@ export const dataService = {
   // Looks up an existing school by case-insensitive name match, or creates
   // one on the fly. Lets registration keep a simple free-text field while
   // still building a real, de-duplicated school directory behind it.
+  //
+  // Goes through the find_or_create_school() RPC (sql/find_or_create_school.sql)
+  // rather than direct table reads/writes: this runs BEFORE the caller is
+  // authenticated (signUp() calls this ahead of supabase.auth.signUp()), and
+  // even once authenticated a plain STUDENT still isn't an admin — but
+  // schools_select/schools_insert require exactly that. The RPC is
+  // SECURITY DEFINER specifically to bypass both for this one legitimate
+  // anon/self-service path, without loosening RLS on the table itself.
   async findOrCreateSchoolId(name: string, district: string): Promise<string | null> {
     const trimmed = name.trim();
     if (!trimmed) return null;
-
-    const { data: existing } = await supabase.from('schools').select('id').ilike('name', trimmed).limit(1).maybeSingle();
-    if (existing) return existing.id;
-
-    const { data: chapters } = await supabase.from('chapters').select('id, name');
-    const matchedChapter = chapters?.find(c => c.name.toLowerCase() === district.trim().toLowerCase());
-
-    const { data: created, error } = await supabase.from('schools').insert({
-      name: trimmed,
-      city: district.trim() || 'Unknown',
-      district: district.trim() || 'Unknown',
-      chapter_id: matchedChapter?.id ?? null,
-    }).select('id').single();
-
-    if (error) {
-      // Unique-constraint race: someone else created the same school between our lookup and insert.
-      const { data: retry } = await supabase.from('schools').select('id').ilike('name', trimmed).limit(1).maybeSingle();
-      if (retry) return retry.id;
-      throw error;
-    }
-    return created.id;
+    const { data, error } = await supabase.rpc('find_or_create_school', { p_name: trimmed, p_district: district });
+    if (error) throw error;
+    return data as string | null;
   },
 
   async signUp(fullName: string, school: string, standard: string, sec: string, district: string, password: string) {
@@ -444,7 +434,15 @@ export const dataService = {
     moduleId: string, title: string, passPercentage: number, questions: any[],
     options?: { timeLimitSeconds?: number; shuffleQuestions?: boolean; isPublished?: boolean }
   ) {
-    const quizId = `quiz-${moduleId}`;
+    // Reuse the module's existing quiz row id if one already exists —
+    // quizzes.module_id is UNIQUE, so assuming the `quiz-${moduleId}`
+    // pattern always applies breaks any quiz whose id predates that
+    // convention (e.g. the original seed data's quiz-rs/quiz-ms/quiz-ep/
+    // quiz-ld): the upsert's id wouldn't match the existing row, so it
+    // would try to insert a second quiz for that module and hit the
+    // module_id unique constraint instead of updating.
+    const { data: existing } = await supabase.from('quizzes').select('id').eq('module_id', moduleId).maybeSingle();
+    const quizId = existing?.id ?? `quiz-${moduleId}`;
 
     const { error: qzErr } = await supabase.from('quizzes').upsert({
       id: quizId, module_id: moduleId, title,

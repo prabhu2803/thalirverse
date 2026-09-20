@@ -193,8 +193,9 @@ export default function Register() {
               </div>
 
               <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Security Question *</label>
+                <label htmlFor="securityQuestion" className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Security Question *</label>
                 <select
+                  id="securityQuestion"
                   value={securityQuestion}
                   onChange={(e) => setSecurityQuestion(e.target.value)}
                   className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
@@ -217,8 +218,9 @@ export default function Register() {
               </div>
 
               <div className="flex flex-col">
-                <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Gender</label>
+                <label htmlFor="gender" className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Gender</label>
                 <select
+                  id="gender"
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
                   className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-950 border border-slate-100 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all dark:text-white appearance-none"
@@ -259,8 +261,9 @@ export default function Register() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="flex flex-col">
-                  <label className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Standard / Class *</label>
-                  <select 
+                  <label htmlFor="standard" className="font-label font-semibold text-sm text-neutral-700 dark:text-neutral-300 mb-2">Standard / Class *</label>
+                  <select
+                    id="standard"
                     required
                     value={standard}
                     onChange={(e) => setStandard(e.target.value)}

@@ -23,7 +23,7 @@ import fs from 'node:fs';
 
 const env = {};
 fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n').forEach(l => {
-  const m = l.match(/^([A-Z0-9_]+)=(.*)$/);
+  const m = l.match(/^([A-Z0-9_]+)=(.*?)\r?$/);
   if (m) env[m[1]] = m[2].replace(/^"|"$/g, '');
 });
 const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;

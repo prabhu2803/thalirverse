@@ -114,7 +114,14 @@ export default function LandingPageClient({ modules }: { modules: any[] }) {
           </motion.div>
 
           {/* Floating badge */}
-          <motion.div variants={popIn} className="absolute top-4 right-0 sm:right-4 bg-green-500 text-white rounded-2xl px-3 py-2 flex items-center gap-1.5 shadow-lg shadow-green-500/30">
+          {/* Arbitrary value, not a named green shade: white text on
+              green-500 only reaches 2.21:1 (fails AA 4.5:1), and even
+              green-700 (this project's actual computed value, not the
+              typical Tailwind default) only reached 4.07:1 — still short.
+              #197A41 measures ~5.4:1. Scoped to this one badge rather than
+              overriding green-500 globally, since that token is also used
+              elsewhere for icons/checkmarks where this fix doesn't apply. */}
+          <motion.div variants={popIn} className="absolute top-4 right-0 sm:right-4 bg-[#197A41] text-white rounded-2xl px-3 py-2 flex items-center gap-1.5 shadow-lg shadow-green-500/30">
             <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
             <span className="text-xs font-bold font-label">Yi Certified</span>
           </motion.div>

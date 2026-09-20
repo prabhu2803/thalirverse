@@ -12,6 +12,15 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+# generated at test-run-time by tests/admin-bulk-import.spec.ts, not source fixtures
+/tests/fixtures/bad.csv
+/tests/fixtures/dupes.csv
+/tests/fixtures/import.csv
+/tests/fixtures/existing.csv
 
 # next.js
 /.next/
